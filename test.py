@@ -13,4 +13,4 @@ number2 = st.number_input("請輸入數字：", key = "num_2")
 # 按鈕
 if st.button("計算和"):
     result = number1 + number2
-    st.write("{result}")
+    st.write(f"{result}")
