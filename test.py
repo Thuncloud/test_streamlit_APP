@@ -8,9 +8,11 @@ name1 = st.text_input("請輸入你的名字：", value="你的名字")
 st.write(f"你好，{name1}！")
 
 number = st.number_input("請輸入數字：", value = 0)
-if number != 0:
-    result = number + 10
-    st.write(f"你輸入的數字+10被為{result}!")
+
+if number is not None:
+    st.write(f"你輸入了 {number}")
+else:
+    st.warning("目前尚未輸入數字喔！")
 
 # 按鈕
 if st.button("點擊我"):
