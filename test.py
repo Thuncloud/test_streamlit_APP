@@ -9,7 +9,7 @@ st.write(f"你好，{name1}！")
 
 number = st.text_input("請輸入數字：", value = 0)
 if number != 0:
-    number = number*10
+    number = number * 10
     st.write(f"你輸入的數字10被為{number}!")
 
 # 按鈕
