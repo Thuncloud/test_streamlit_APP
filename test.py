@@ -10,7 +10,7 @@ st.write(f"你好，{name1}！")
 number1 = st.number_input("請輸入數字：", key = "num_1")
 number2 = st.number_input("請輸入數字：", key = "num_2")
 
-if number is not None:
+if number1 is not None:
     st.write(f"你輸入了 {number1}")
 else:
     st.warning("目前尚未輸入數字喔！")
