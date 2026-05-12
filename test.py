@@ -17,3 +17,6 @@ st.write(f"和:{result1}")
 if st.button("計算乘積"):
     result2 = number1 * number2
     st.write(f"乘積:{result2}")
+
+option = st.sidebar.selectbox("選擇一個選項：", ["選項1", "選項2", "選項3"])
+st.write(f"你選擇了：{option}")
