@@ -14,6 +14,6 @@ result1 = number1 + number2
 st.write(f"和:{result1}")
 
 # 按鈕
-if st.button("計算和"):
+if st.button("計算乘積"):
     result2 = number1 * number2
     st.write(f"乘積:{result2}")
