@@ -17,6 +17,7 @@ with st.sidebar:
     # 根據教材內容整理的演算法清單
     step_options = [
         "轉為灰階", 
+        "顏色翻轉",
         "高斯模糊 (濾波)", 
         "中值濾波 (去噪)", 
         "Canny 邊緣檢測", 
@@ -46,7 +47,10 @@ if uploaded_file is not None:
 
     # 2. 依照教材邏輯執行動態流水線
     for step in selected_steps:
-        if step == "高斯模糊 (濾波)":
+        if step == "顏色翻轉":
+            img_current = cv2.bitwise_not(img_current)
+            
+        elif step == "高斯模糊 (濾波)":
             img_current = cv2.GaussianBlur(img_current, (5, 5), 0)
         
         elif step == "中值濾波 (去噪)":
