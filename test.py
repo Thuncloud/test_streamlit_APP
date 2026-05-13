@@ -36,7 +36,7 @@ def display_map_with_bounds(uploaded_file):
     m.fit_bounds([[0, 0], [height, width]])
     
     st_folium(m, width="100%", height=600)
-    st.image(image)
+    st.image(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
 
 
 st.title("AOI影像處理")
