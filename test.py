@@ -92,8 +92,12 @@ if uploaded_file is not None:
                 edges = img_current
             
             # 建立彩色底圖畫線
+            h_thresh = st.sidebar.slider("Hough 投票閾值", 10, 200, 100)
+            min_len = st.sidebar.slider("最小線段長度", 1, 200, 50)
+            max_gap = st.sidebar.slider("最大線段間隙", 1, 50, 10)
+            
             line_img = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR) if len(edges.shape) == 2 else edges.copy()
-            lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=100, minLineLength=50, maxLineGap=10)
+            lines = cv2.HoughLinesP(edges, 1, np.pi/180, h_thresh, minLineLength=min_len, maxLineGap=max_gap)
             
             if lines is not None:
                 for line in lines:
