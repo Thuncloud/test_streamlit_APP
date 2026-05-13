@@ -45,7 +45,7 @@ if uploaded_file is not None:
     img = Image.open(uploaded_file)
     width, height = img.size
     
-    # 建立一個地圖物件，座標系設為簡單的像素座標
+    # 建立地圖物件
     m = folium.Map(
         crs='Simple', 
         zoom_start=1, 
@@ -53,14 +53,15 @@ if uploaded_file is not None:
         tiles=None
     )
     
-    # 將圖片疊加在地圖上
-    folium.RasterLayer(
-        image=img,
-        bounds=[[0, 0], [height, width]]
+    # --- 修正路徑如下 ---
+    folium.raster_layers.ImageOverlay(
+        image=np.array(img),               # 轉成 numpy 陣列確保相容性
+        bounds=[[0, 0], [height, width]],  # 設定影像邊界
+        opacity=1.0                        # 不透明度
     ).add_to(m)
     
-    # 限制地圖顯示範圍
+    # 自動縮放至影像範圍
     m.fit_bounds([[0, 0], [height, width]])
     
-    # 顯示地圖
+    # 顯示
     st_folium(m, width=800, height=600)
