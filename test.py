@@ -53,11 +53,15 @@ if uploaded_file is not None:
             t1 = st.sidebar.slider("Canny 低閾值", 0, 255, 50)
             t2 = st.sidebar.slider("Canny 高閾值", 0, 255, 150)
             img_current = cv2.Canny(temp, t1, t2)
+            
         elif step == "顏色翻轉":
             img_current = cv2.bitwise_not(img_current)
             
         elif step == "高斯模糊 (濾波)":
-            img_current = cv2.GaussianBlur(img_current, (5, 5), 0)
+            k = st.sidebar.slider("高斯核大小", 1, 15, 5, step=2)
+            sig = st.sidebar.slider("SigmaX", 0.0, 5.0, 0.0)
+            
+            img_current = cv2.GaussianBlur(img_current, (k, k), sig)
         
         elif step == "中值濾波 (去噪)":
             k = st.sidebar.slider("中值濾波核大小", 3, 15, 5, step=2)
