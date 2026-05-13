@@ -105,31 +105,46 @@ if uploaded_file is not None:
     col_left, col_right = st.columns([2, 1])
 
     with col_left:
-        st.subheader("🖼️ 影像處理結果")
+        st.subheader("🖼️ 影像對比結果")
         if selected_steps:
             st.caption(f"執行路徑: 原圖 ➔ {' ➔ '.join(selected_steps)}")
         
-        # 轉換色彩格式供 Streamlit 顯示
-        if len(img_current.shape) == 3:
-            display_img = cv2.cvtColor(img_current, cv2.COLOR_BGR2RGB)
-        else:
-            display_img = img_current
+        # 建立內部分欄：左邊放原圖，右邊放處理後的圖
+        sub_col_orig, sub_col_proc = st.columns(2)
+        
+        with sub_col_orig:
+            # 準備原圖 (需轉為 RGB 顏色才正確)
+            img_orig_rgb = cv2.cvtColor(img_original, cv2.COLOR_BGR2RGB)
+            st.image(img_orig_rgb, caption="原始影像 (Original)", use_container_width=True)
             
-        st.image(display_img, use_container_width=True)
+        with sub_col_proc:
+            # 準備處理後的影像
+            if len(img_current.shape) == 3:
+                display_img = cv2.cvtColor(img_current, cv2.COLOR_BGR2RGB)
+            else:
+                display_img = img_current
+            st.image(display_img, caption="處理後影像 (Processed)", use_container_width=True)
 
     with col_right:
         if do_hist:
             st.subheader("📊 像素直方圖")
+            # 注意：這裡顯示的是「處理後影像」的直方圖，這對觀察濾波效果很有幫助
             fig, ax = plt.subplots()
             if len(img_current.shape) == 2:
+                # 繪製灰階直方圖 (使用教材提到的 ravel() 扁平化處理)
                 ax.hist(img_current.ravel(), 256, [0, 256], color='black')
+                ax.set_title("Grayscale Histogram")
             else:
+                # 繪製彩色直方圖
                 for i, col in enumerate(['b', 'g', 'r']):
                     hist = cv2.calcHist([img_current], [i], None, [256], [0, 256])
                     ax.plot(hist, color=col)
+                ax.set_title("RGB Histogram")
+            
+            ax.set_xlim([0, 256])
             st.pyplot(fig)
         else:
-            st.info("👈 勾選側邊欄可查看影像數值分佈。")
+            st.info("👈 勾選側邊欄可查看處理後的數據分佈。")
 
 else:
     st.warning("請先上傳圖片以開始 AOI 演算法測試。")
