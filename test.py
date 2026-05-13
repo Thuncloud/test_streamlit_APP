@@ -59,6 +59,11 @@ if uploaded_file is not None:
         zoom_start=1, 
         location=[height/2, width/2], 
         tiles=None
+        max_bounds=True, 
+        min_lat=0,
+        max_lat=height,
+        min_lon=0,
+        max_lon=width
     )
     
     # --- 修正路徑如下 ---
