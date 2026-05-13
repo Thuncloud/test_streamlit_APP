@@ -65,11 +65,7 @@ if uploaded_file is not None:
         elif step == "轉為灰階":
             if len(img_current.shape) == 3:
                 img_current = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY)
-            
-        elif step == "Canny 邊緣檢測":
-            temp = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY) if len(img_current.shape) == 3 else img_current
-            img_current = cv2.Canny(temp, 50, 150)
-            
+        
         elif step == "二值化處理":
             temp = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY) if len(img_current.shape) == 3 else img_current
             thresh = st.sidebar.slider(
