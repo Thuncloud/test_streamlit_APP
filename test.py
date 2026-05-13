@@ -23,7 +23,8 @@ with st.sidebar:
         "Canny 邊緣檢測", 
         "二值化處理",
         "Hough 直線偵測",
-        "方向性邊緣偵測"
+        "方向性邊緣偵測",
+        "圓圈檢測"
     ]
     
     selected_steps = st.multiselect(
@@ -105,6 +106,36 @@ if uploaded_file is not None:
                     x1, y1, x2, y2 = line[0]
                     cv2.line(line_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
             img_current = line_img
+
+        elif step == "圓圈檢測":
+            # 1. 前處理 (圓檢測對雜訊極敏感，必須平滑化)
+            gray = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY) if len(img_current.shape) == 3 else img_current
+            # 教材重點：使用高斯模糊降噪
+            blurred = cv2.GaussianBlur(gray, (9, 9), 2)
+    
+            # 2. 側邊欄控制
+            p2 = st.sidebar.slider("圓心投票閾值 (param2)", 10, 100, 30)
+            min_dist = st.sidebar.slider("圓心最小距離", 10, 200, 50)
+            r_limit = st.sidebar.slider("半徑範圍", 0, 500, (10, 100))
+    
+            # 3. 執行偵測
+            circles = cv2.HoughCircles(
+                blurred, cv2.HOUGH_GRADIENT, dp=1, 
+                minDist=min_dist, param1=100, param2=p2, 
+                minRadius=r_limit[0], maxRadius=r_limit[1]
+            )
+    
+            # 4. 繪製結果
+            res_img = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+            if circles is not None:
+                circles = np.uint16(np.around(circles))
+                for i in circles[0, :]:
+                    # 畫外圓 (綠色)
+                    cv2.circle(res_img, (i[0], i[1]), i[2], (0, 255, 0), 2)
+                    # 畫圓心 (紅色)
+                    cv2.circle(res_img, (i[0], i[1]), 2, (0, 0, 255), 3)
+                    
+            img_current = res_img
             
         elif step == "方向性邊緣偵測":
             # 1. 確保灰階處理
