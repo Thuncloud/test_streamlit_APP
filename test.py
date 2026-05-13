@@ -30,5 +30,9 @@ if uploaded_file is not None:
                 
             case "灰階處理":
                 st.write("灰階處理")
+                gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+                st.image(gray_image)
+
+
             
 
