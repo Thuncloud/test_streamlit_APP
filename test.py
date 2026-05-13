@@ -43,7 +43,8 @@ if uploaded_file is not None:
                     value=127, 
                     step=1
                 )
-                ret, output = cv2.threshold(image, thresh, 255, cv2.THRESH_BINARY)
+                gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+                ret, output = cv2.threshold(gray_image, thresh, 255, cv2.THRESH_BINARY)
                 st.image(output)
 
 
