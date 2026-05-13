@@ -24,7 +24,8 @@ with st.sidebar:
         "二值化處理",
         "Hough 直線偵測",
         "方向性邊緣偵測",
-        "圓圈檢測"
+        "圓圈檢測",
+        "消除摩爾紋 (巴特沃斯)"
     ]
     
     selected_steps = st.multiselect(
@@ -136,6 +137,15 @@ if uploaded_file is not None:
                     cv2.circle(res_img, (i[0], i[1]), 2, (0, 0, 255), 3)
                     
             img_current = res_img
+
+        elif step == "消除摩爾紋 (巴特沃斯)":
+            temp = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY) if len(img_current.shape) == 3 else img_current
+    
+            # 調整 D0 是關鍵！ 
+            # 摩爾紋頻率很高，所以 D0 要設得比較小 (例如 20-40)
+            d0_val = st.sidebar.slider("濾波強度 (D0 越小越模糊)", 10, 100, 30)
+    
+            img_current = apply_butterworth_lowpass(temp, d0=d0_val, n=2)
             
         elif step == "方向性邊緣偵測":
             # 1. 確保灰階處理
