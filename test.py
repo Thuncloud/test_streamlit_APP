@@ -1,6 +1,9 @@
 import streamlit as st
 import cv2
 import numpy as np
+from streamlit_folium import st_folium
+import folium
+from PIL import Image
 
 st.title("Hello, Streamlit!")
 st.write("這是一個簡單的範例，歡迎來到 Streamlit 的世界！")
