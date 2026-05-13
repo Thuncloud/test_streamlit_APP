@@ -107,31 +107,47 @@ if uploaded_file is not None:
             img_current = line_img
             
         elif step == "方向性邊緣偵測":
-            # 1. 轉灰階
+            # 1. 確保灰階處理
             temp = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY) if len(img_current.shape) == 3 else img_current
-            # 2. 定義側邊欄選擇器 (讓使用者選方向)
-            direction = st.sidebar.selectbox("選擇偵測方向", ["水平 (0°)", "垂直 (90°)", "+45°", "-45°"])
-            # 3. 定義遮罩 (Masks)
-            if direction == "水平 (0°)":
-                kernel = np.array([[-1, -1, -1],
-                                   [ 2,  2,  2],
-                                   [-1, -1, -1]])
-            elif direction == "垂直 (90°)":
-                kernel = np.array([[-1,  2, -1],
-                                   [-1,  2, -1],
-                                   [-1,  2, -1]])
-            elif direction == "+45°":
-                kernel = np.array([[-1, -1,  2],
-                                   [-1,  2, -1],
-                                   [ 2, -1, -1]])
-            elif direction == "-45°":
-                kernel = np.array([[ 2, -1, -1],
-                                   [-1,  2, -1],
-                                   [-1, -1,  2]])
+    
+            # 2. 側邊欄控制項
+            direction = st.sidebar.selectbox("選擇偵測方向", ["水平 (0°)", "垂直 (90°)", "垂直 + 水平", "+45°", "-45°"])
+    
+            # 這裡加入拉桿參數
+            # alpha 分配權重 (0.0 為純水平, 1.0 為純垂直)
+            blend_weight = st.sidebar.slider("水平/垂直融合比例", 0.0, 1.0, 0.5)
+            # brightness 補償 (有時候過濾完太暗，可以手動調亮)
+            brightness_offset = st.sidebar.slider("邊緣亮度補償", 0, 100, 0)
+    
+            # 3. 定義卷積核 (Kernels)
+            h_kernel = np.array([[-1, -1, -1], [ 2,  2,  2], [-1, -1, -1]])
+            v_kernel = np.array([[-1,  2, -1], [-1,  2, -1], [-1,  2, -1]])
+            p45_kernel = np.array([[-1, -1,  2], [-1,  2, -1], [ 2, -1, -1]])
+            m45_kernel = np.array([[ 2, -1, -1], [-1,  2, -1], [-1, -1,  2]])
+    
+            # 4. 運算邏輯
+            if direction == "垂直 + 水平":
+                # 教材重點：使用 CV_16S 避免負值被歸零
+                res_h = cv2.filter2D(temp, cv2.CV_16S, h_kernel)
+                res_v = cv2.filter2D(temp, cv2.CV_16S, v_kernel)
                 
-            # 4. 執行卷積運算
-            # ddepth = -1 表示輸出影像與原圖深度相同
-            img_current = cv2.filter2D(temp, -1, kernel)
+                abs_h = cv2.convertScaleAbs(res_h)
+                abs_v = cv2.convertScaleAbs(res_v)
+        
+                # 利用拉桿調整混合比例：dst = src1*alpha + src2*beta + gamma
+                # 我們讓 alpha = 1 - blend_weight, beta = blend_weight
+                img_current = cv2.addWeighted(abs_h, 1 - blend_weight, abs_v, blend_weight, brightness_offset)
+        
+            else:
+                # 單一方向偵測
+                if direction == "水平 (0°)": curr_kernel = h_kernel
+                elif direction == "垂直 (90°)": curr_kernel = v_kernel
+                elif direction == "+45°": curr_kernel = p45_kernel
+                elif direction == "-45°": curr_kernel = m45_kernel
+        
+                # 執行濾波並補償亮度
+                filtered = cv2.filter2D(temp, cv2.CV_16S, curr_kernel)
+                img_current = cv2.convertScaleAbs(filtered + brightness_offset)
             
     
 
