@@ -68,28 +68,7 @@ if uploaded_file is not None:
             st.info(f"當前路徑：原圖 ➔ {' ➔ '.join(selected_steps)}")
         
         # 建立 Folium 地圖 (Simple CRS)
-        m = folium.Map(
-            crs='Simple',
-            location=[h/2, w/2],
-            zoom_start=0,
-            min_zoom=-2,
-            max_bounds=True,
-            min_lat=0, max_lat=h,
-            min_lon=0, max_lon=w,
-            tiles=None
-        )
-
-        # 疊加影像
-        folium.raster_layers.ImageOverlay(
-            image=img_current,
-            bounds=[[0, 0], [h, w]],
-            opacity=1.0
-        ).add_to(m)
-
-        # 強制初始畫面完整顯示
-        m.fit_bounds([[0, 0], [h, w]])
-        
-        st_folium(m, width="100%", height=600, key="aoi_map")
+        st.image(img_current)
 
     with col_data:
         if do_hist:
