@@ -5,48 +5,36 @@ from streamlit_folium import st_folium
 import folium
 from PIL import Image
 
-st.title("AOI影像處理")
-st.write("選擇操作模式並上傳圖片")
-
-option = st.sidebar.selectbox("選擇一個選項：", ["選項1", "選項2", "選項3", "灰階處理", "二值化處理"])
-uploaded_file = st.sidebar.file_uploader("上傳影像進行處理...", type=["jpg", "jpeg", "png"])
+# 1. 在側標欄定義可選的處理步驟
+step_options = ["灰階化", "高斯模糊", "二值化", "Canny 邊緣檢測", "中值濾波"]
+selected_steps = st.sidebar.multiselect("請依序選擇處理步驟：", step_options)
 
 if uploaded_file is not None:
-    file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
-    image = cv2.imdecode(file_bytes, 1)
-    match option:
-            case "選項1":
-                st.write("你選擇1")
-                # 文字輸入框
-                name1 = st.text_input("輸入你的名字", value="你的名字")
-                st.write(f"你好，{name1}!")
-
-            case "選項2":
-                st.write("你選擇2")
-                st.image(image)
-                
-            case "選項3":
-                st.write("你選擇3")
-                
-            case "灰階處理":
-                st.write("灰階處理")
-                gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-                st.image(gray_image)
-                
-            case "二值化處理":
-                st.write("二值化處理")
-                # 限定範圍在 0.0 到 1.0 之間 (適合權重或機率調整)
-                thresh = st.slider(
-                    "請選擇透明度：", 
-                    min_value=0, 
-                    max_value=255, 
-                    value=127, 
-                    step=1
-                )
-                gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-                ret, output = cv2.threshold(gray_image, thresh, 255, cv2.THRESH_BINARY)
-                st.image(output)
-
-
+    # 讀取原始影像
+    img = img_original.copy()
+    
+    # 2. 依照使用者選擇的「順序」跑迴圈
+    for step in selected_steps:
+        if step == "灰階化":
+            # 檢查是否已經是灰階，避免重複轉型報錯
+            if len(img.shape) == 3:
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        
+        elif step == "高斯模糊":
+            img = cv2.GaussianBlur(img, (5, 5), 0)
             
+        elif step == "二值化":
+            if len(img.shape) == 3: # 如果還是彩色，先強制轉灰階
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            _, img = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY)
+            
+        elif step == "Canny 邊緣檢測":
+            if len(img.shape) == 3:
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            img = cv2.Canny(img, 50, 150)
+            
+        elif step == "中值濾波":
+            img = cv2.medianBlur(img, 5)
 
+    # 3. 顯示最終疊加結果
+    st.image(img, caption=f"經過步驟：{' -> '.join(selected_steps) if selected_steps else '原始影像'}")
