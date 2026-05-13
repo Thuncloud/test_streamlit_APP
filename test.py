@@ -60,7 +60,8 @@ if uploaded_file is not None:
             img_current = cv2.GaussianBlur(img_current, (5, 5), 0)
         
         elif step == "中值濾波 (去噪)":
-            img_current = cv2.medianBlur(img_current, 5)
+            k = st.sidebar.slider("中值濾波核大小", 3, 15, 5, step=2)
+            img_current = cv2.medianBlur(img_current, k)
             
         elif step == "轉為灰階":
             if len(img_current.shape) == 3:
