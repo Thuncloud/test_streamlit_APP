@@ -58,7 +58,6 @@ if uploaded_file is not None:
         crs='Simple', 
         zoom_start=1, 
         location=[height/2, width/2], 
-        tiles=None
         max_bounds=True, 
         min_lat=0,
         max_lat=height,
