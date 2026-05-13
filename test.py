@@ -5,6 +5,8 @@ from streamlit_folium import st_folium
 import folium
 from PIL import Image
 
+step_options = ["灰階化", "高斯模糊", "二值化", "Canny 邊緣檢測", "中值濾波"]
+selected_steps = st.sidebar.multiselect("請依序選擇處理步驟：", step_options)
 uploaded_file = st.sidebar.file_uploader("上傳影像", type=["jpg", "png", "tif"])
 
 if uploaded_file is not None:
