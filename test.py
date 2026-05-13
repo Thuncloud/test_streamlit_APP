@@ -19,8 +19,6 @@ with st.sidebar:
         "轉為灰階", 
         "高斯模糊 (濾波)", 
         "中值濾波 (去噪)", 
-        "Sobel 邊緣檢測 (X軸)",
-        "Sobel 邊緣檢測 (Y軸)",
         "Canny 邊緣檢測", 
         "二值化處理",
         "Hough 直線偵測"
@@ -57,17 +55,6 @@ if uploaded_file is not None:
         elif step == "轉為灰階":
             if len(img_current.shape) == 3:
                 img_current = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY)
-                
-        elif step == "Sobel 邊緣檢測 (X軸)":
-            # 教材重點：Sobel 常需要轉灰階後運算
-            temp = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY) if len(img_current.shape) == 3 else img_current
-            img_current = cv2.Sobel(temp, cv2.CV_64F, 1, 0, ksize=3)
-            img_current = cv2.convertScaleAbs(img_current) # 轉回 uint8 顯示
-            
-        elif step == "Sobel 邊緣檢測 (Y軸)":
-            temp = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY) if len(img_current.shape) == 3 else img_current
-            img_current = cv2.Sobel(temp, cv2.CV_64F, 0, 1, ksize=3)
-            img_current = cv2.convertScaleAbs(img_current)
             
         elif step == "Canny 邊緣檢測":
             temp = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY) if len(img_current.shape) == 3 else img_current
