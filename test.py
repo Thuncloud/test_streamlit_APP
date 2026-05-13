@@ -5,16 +5,17 @@ from streamlit_folium import st_folium
 import folium
 from PIL import Image
 
-# 1. 在側標欄定義可選的處理步驟
-step_options = ["灰階化", "高斯模糊", "二值化", "Canny 邊緣檢測", "中值濾波"]
-uploaded_file = st.sidebar.file_uploader("上傳影像進行處理...", type=["jpg", "jpeg", "png"])
-selected_steps = st.sidebar.multiselect("請依序選擇處理步驟：", step_options)
+uploaded_file = st.sidebar.file_uploader("上傳影像", type=["jpg", "png", "tif"])
 
 if uploaded_file is not None:
-    # 讀取原始影像
+    # 1. 這裡先建立 img_original
+    file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
+    img_original = cv2.imdecode(file_bytes, 1)
+
+    # 2. 接下來才能進行 copy() 或是其他處理
     img = img_original.copy()
     
-    # 2. 依照使用者選擇的「順序」跑迴圈
+    # 3. 執行你的動態步驟 (Pipeline)
     for step in selected_steps:
         if step == "灰階化":
             # 檢查是否已經是灰階，避免重複轉型報錯
