@@ -31,8 +31,8 @@ match option:
             
         case "選擇2":
             st.write("你選擇2")
-                if uploaded_file:
-                     display_map_with_bounds(uploaded_file)
+            if uploaded_file:
+                    display_map_with_bounds(uploaded_file)
             
         case "選擇3":
             st.write("你選擇3")
