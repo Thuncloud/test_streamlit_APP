@@ -107,4 +107,7 @@ if uploaded_file is not None:
             ax.set_xlim([0, 256])
             st.pyplot(fig)
         else:
-            st.info("👈 請從左側勾選「顯示直方圖」來分析
+            st.info("👈 請從左側勾選「顯示直方圖」來分析。")
+
+else:
+    st.warning("請先上傳影像檔案。")
