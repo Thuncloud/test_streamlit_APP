@@ -10,35 +10,65 @@ selected_steps = st.sidebar.multiselect("請依序選擇處理步驟：", step_o
 uploaded_file = st.sidebar.file_uploader("上傳影像", type=["jpg", "png", "tif"])
 
 if uploaded_file is not None:
-    # 1. 這裡先建立 img_original
+    # 讀取原始影像並備份一份作為處理起點
     file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
     img_original = cv2.imdecode(file_bytes, 1)
-
-    # 2. 接下來才能進行 copy() 或是其他處理
-    img = img_original.copy()
     
-    # 3. 執行你的動態步驟 (Pipeline)
-    for step in selected_steps:
-        if step == "灰階化":
-            # 檢查是否已經是灰階，避免重複轉型報錯
-            if len(img.shape) == 3:
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        
-        elif step == "高斯模糊":
-            img = cv2.GaussianBlur(img, (5, 5), 0)
-            
-        elif step == "二值化":
-            if len(img.shape) == 3: # 如果還是彩色，先強制轉灰階
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            _, img = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY)
-            
-        elif step == "Canny 邊緣檢測":
-            if len(img.shape) == 3:
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            img = cv2.Canny(img, 50, 150)
-            
-        elif step == "中值濾波":
-            img = cv2.medianBlur(img, 5)
+    # 建立處理副本
+    img_processed = img_original.copy()
 
-    # 3. 顯示最終疊加結果
-    st.image(img, caption=f"經過步驟：{' -> '.join(selected_steps) if selected_steps else '原始影像'}")
+    # --- 1. 在側邊欄建立勾選選項 ---
+    with st.sidebar:
+        st.header("🛠️ 影像處理步驟")
+        
+        # 使用勾選框決定是否執行該步驟
+        do_gray = st.checkbox("1. 轉為灰階", value=True)
+        do_blur = st.checkbox("2. 高斯模糊 (濾噪)")
+        do_canny = st.checkbox("3. Canny 邊緣檢測")
+        do_hist = st.checkbox("4. 顯示直方圖分析")
+
+    # --- 2. 依照順序執行被勾選的步驟 ---
+    
+    # 步驟 1: 灰階
+    if do_gray:
+        img_processed = cv2.cvtColor(img_processed, cv2.COLOR_BGR2GRAY)
+        
+    # 步驟 2: 模糊
+    if do_blur:
+        # 這裡加個小判斷，確保參數是奇數
+        img_processed = cv2.GaussianBlur(img_processed, (5, 5), 0)
+        
+    # 步驟 3: Canny
+    if do_canny:
+        # Canny 需要單通道影像，如果前面沒勾灰階，這裡幫他轉一下
+        if len(img_processed.shape) == 3:
+            temp_img = cv2.cvtColor(img_processed, cv2.COLOR_BGR2GRAY)
+        else:
+            temp_img = img_processed
+        img_processed = cv2.Canny(temp_img, 100, 200)
+
+    # --- 3. 顯示結果 ---
+    st.subheader("🖼️ 處理結果")
+    
+    # 注意：Streamlit 顯示彩色圖需要 RGB 格式
+    display_img = img_processed
+    if len(img_processed.shape) == 3:
+        display_img = cv2.cvtColor(img_processed, cv2.COLOR_BGR2RGB)
+        
+    st.image(display_img, use_container_width=True)
+
+    # 步驟 4: 直方圖 (這屬於數據分析，不影響影像變數)
+    if do_hist:
+        import matplotlib.pyplot as plt
+        st.divider()
+        st.subheader("📊 直方圖分析")
+        fig, ax = plt.subplots()
+        
+        if len(img_processed.shape) == 2:
+            hist = cv2.calcHist([img_processed], [0], None, [256], [0, 256])
+            ax.plot(hist, color='black')
+        else:
+            for i, col in enumerate(['b', 'g', 'r']):
+                hist = cv2.calcHist([img_processed], [i], None, [256], [0, 256])
+                ax.plot(hist, color=col)
+        st.pyplot(fig)
