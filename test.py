@@ -64,7 +64,7 @@ match option:
             
         case "選擇2":
             st.write("你選擇2")
-            if uploaded_file:
+            if uploaded_file is not None:
                     display_map_with_bounds(uploaded_file)
             
         case "選擇3":
