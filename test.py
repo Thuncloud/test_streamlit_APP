@@ -37,37 +37,35 @@ match option:
             
 
 def display_map_with_bounds(uploaded_file):
-    # 讀取影像獲取寬高
     img = Image.open(uploaded_file)
     width, height = img.size
     img_array = np.array(img)
 
-    # 1. 建立地圖物件，關鍵在於 min_zoom 的設定
-    # 這裡的 min_zoom 通常設為 0 或 1，視顯示容器大小而定
+    # 在建立 Map 時就設定好邊界
     m = folium.Map(
         crs='Simple', 
         location=[height/2, width/2], 
         zoom_start=1,
-        min_zoom=0,           # 限制最小縮放比例，防止縮太小看到邊界外
-        max_bounds=True,      # 啟動邊界限制
-        tiles=None,
-        control_scale=True
+        min_zoom=0,
+        # 直接在這裡定義最大邊界範圍
+        max_bounds=True, 
+        max_lat=height,
+        min_lat=0,
+        max_lon=width,
+        min_lon=0,
+        tiles=None
     )
 
-    # 2. 疊加圖片
     folium.raster_layers.ImageOverlay(
         image=img_array,
         bounds=[[0, 0], [height, width]],
         opacity=1.0
     ).add_to(m)
 
-    # 3. 限制地圖的最大平移範圍，使用者無法拖出圖片區域
-    m.set_max_bounds([[0, 0], [height, width]])
-
-    # 4. 讓地圖初始狀態就完美貼合邊界
+    # 移除會報錯的 m.set_max_bounds(...)
+    # 使用 fit_bounds 確保初始畫面完美貼合
     m.fit_bounds([[0, 0], [height, width]])
-
-    # 顯示地圖
+    
     st_folium(m, width="100%", height=600)
 
 if uploaded_file:
