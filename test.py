@@ -47,7 +47,13 @@ if uploaded_file is not None:
 
     # 2. 依照教材邏輯執行動態流水線
     for step in selected_steps:
-        if step == "顏色翻轉":
+        if step == "Canny 邊緣檢測":
+            # 自動轉灰階防錯
+            temp = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY) if len(img_current.shape) == 3 else img_current
+            t1 = st.sidebar.slider("Canny 低閾值", 0, 255, 50)
+            t2 = st.sidebar.slider("Canny 高閾值", 0, 255, 150)
+            img_current = cv2.Canny(temp, t1, t2)
+        elif step == "顏色翻轉":
             img_current = cv2.bitwise_not(img_current)
             
         elif step == "高斯模糊 (濾波)":
