@@ -97,7 +97,7 @@ if uploaded_file is not None:
             img_current = line_img
 
     # 3. 顯示區塊
-    col_left, col_right = st.columns([1, 2])
+    col_left, col_right = st.columns([2, 1])
 
     with col_left:
         st.subheader("🖼️ 影像處理結果")
