@@ -8,7 +8,7 @@ from PIL import Image
 st.title("AOI影像處理")
 st.write("選擇操作模式並上傳圖片")
 
-option = st.sidebar.selectbox("選擇一個選項：", ["選項1", "選項2", "選項3", "灰階處理"])
+option = st.sidebar.selectbox("選擇一個選項：", ["選項1", "選項2", "選項3", "灰階處理", "二值化處理"])
 uploaded_file = st.sidebar.file_uploader("上傳影像進行處理...", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
