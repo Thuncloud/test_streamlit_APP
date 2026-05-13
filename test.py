@@ -36,44 +36,39 @@ match option:
             st.write("你選擇3")
             
 
-#if uploaded_file is not None:
-    # 第一步：將上傳的檔案轉為 byte 陣列
-#    file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
-    
-    # 第二步：使用 OpenCV 解碼成影像格式 (BGR)
-#    cv_image = cv2.imdecode(file_bytes, 1)
-    
-    # 第三步：處理影像 (例如轉灰階)
-#    gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
-    
-    # 第四步：顯示 (注意：st.image 預設是 RGB，所以 OpenCV 影像要先轉回 RGB)
-#    st.image(cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB), caption="OpenCV 讀取的影像")
-
-if uploaded_file is not None:
+def display_map_with_bounds(uploaded_file):
+    # 讀取影像獲取寬高
     img = Image.open(uploaded_file)
     width, height = img.size
-    
-    # 建立地圖物件
+    img_array = np.array(img)
+
+    # 1. 建立地圖物件，關鍵在於 min_zoom 的設定
+    # 這裡的 min_zoom 通常設為 0 或 1，視顯示容器大小而定
     m = folium.Map(
         crs='Simple', 
-        zoom_start=1, 
         location=[height/2, width/2], 
-        max_bounds=True, 
-        min_lat=0,
-        max_lat=height,
-        min_lon=0,
-        max_lon=width
+        zoom_start=1,
+        min_zoom=0,           # 限制最小縮放比例，防止縮太小看到邊界外
+        max_bounds=True,      # 啟動邊界限制
+        tiles=None,
+        control_scale=True
     )
-    
-    # --- 修正路徑如下 ---
+
+    # 2. 疊加圖片
     folium.raster_layers.ImageOverlay(
-        image=np.array(img),               # 轉成 numpy 陣列確保相容性
-        bounds=[[0, 0], [height, width]],  # 設定影像邊界
-        opacity=1.0                        # 不透明度
+        image=img_array,
+        bounds=[[0, 0], [height, width]],
+        opacity=1.0
     ).add_to(m)
-    
-    # 自動縮放至影像範圍
+
+    # 3. 限制地圖的最大平移範圍，使用者無法拖出圖片區域
+    m.setMaxBounds([[0, 0], [height, width]])
+
+    # 4. 讓地圖初始狀態就完美貼合邊界
     m.fit_bounds([[0, 0], [height, width]])
-    
-    # 顯示
-    st_folium(m, width=800, height=600)
+
+    # 顯示地圖
+    st_folium(m, width="100%", height=600)
+
+if uploaded_file:
+    display_map_with_bounds(uploaded_file)
