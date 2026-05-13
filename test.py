@@ -104,6 +104,35 @@ if uploaded_file is not None:
                     x1, y1, x2, y2 = line[0]
                     cv2.line(line_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
             img_current = line_img
+            
+        elif step == "方向性邊緣偵測":
+            # 1. 轉灰階
+            temp = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY) if len(img_current.shape) == 3 else img_current
+            # 2. 定義側邊欄選擇器 (讓使用者選方向)
+            direction = st.sidebar.selectbox("選擇偵測方向", ["水平 (0°)", "垂直 (90°)", "+45°", "-45°"])
+            # 3. 定義遮罩 (Masks)
+            if direction == "水平 (0°)":
+                kernel = np.array([[-1, -1, -1],
+                                   [ 2,  2,  2],
+                                   [-1, -1, -1]])
+            elif direction == "垂直 (90°)":
+                kernel = np.array([[-1,  2, -1],
+                                   [-1,  2, -1],
+                                   [-1,  2, -1]])
+            elif direction == "+45°":
+                kernel = np.array([[-1, -1,  2],
+                                   [-1,  2, -1],
+                                   [ 2, -1, -1]])
+            elif direction == "-45°":
+                kernel = np.array([[ 2, -1, -1],
+                                   [-1,  2, -1],
+                                   [-1, -1,  2]])
+                
+            # 4. 執行卷積運算
+            # ddepth = -1 表示輸出影像與原圖深度相同
+            img_current = cv2.filter2D(temp, -1, kernel)
+            
+    
 
     # 3. 顯示區塊
     col_left, col_right = st.columns([2, 1])
