@@ -25,15 +25,39 @@ st.write(f"你選擇了：{option}")
 
 uploaded_file = st.file_uploader("上傳影像進行處理...", type=["jpg", "jpeg", "png"])
 
-if uploaded_file is not None:
+#if uploaded_file is not None:
     # 第一步：將上傳的檔案轉為 byte 陣列
-    file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
+#    file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
     
     # 第二步：使用 OpenCV 解碼成影像格式 (BGR)
-    cv_image = cv2.imdecode(file_bytes, 1)
+#    cv_image = cv2.imdecode(file_bytes, 1)
     
     # 第三步：處理影像 (例如轉灰階)
-    gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
+#    gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
     
     # 第四步：顯示 (注意：st.image 預設是 RGB，所以 OpenCV 影像要先轉回 RGB)
-    st.image(cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB), caption="OpenCV 讀取的影像")
+#    st.image(cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB), caption="OpenCV 讀取的影像")
+
+if uploaded_file is not None:
+    img = Image.open(uploaded_file)
+    width, height = img.size
+    
+    # 建立一個地圖物件，座標系設為簡單的像素座標
+    m = folium.Map(
+        crs='Simple', 
+        zoom_start=1, 
+        location=[height/2, width/2], 
+        tiles=None
+    )
+    
+    # 將圖片疊加在地圖上
+    folium.RasterLayer(
+        image=img,
+        bounds=[[0, 0], [height, width]]
+    ).add_to(m)
+    
+    # 限制地圖顯示範圍
+    m.fit_bounds([[0, 0], [height, width]])
+    
+    # 顯示地圖
+    st_folium(m, width=800, height=600)
