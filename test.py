@@ -8,25 +8,33 @@ from PIL import Image
 st.title("AOI影像處理")
 st.write("選擇操作模式並上傳圖片")
 
-# 文字輸入框
-name1 = st.text_input("請輸入你的名字：", value="你的名字")
-st.write(f"你好，{name1}！")
-
-number1 = st.number_input("請輸入數字：", key = "num_1")
-number2 = st.number_input("請輸入數字：", key = "num_2")
-
-result1 = number1 + number2
-st.write(f"和:{result1}")
-
-# 按鈕
-if st.button("計算乘積"):
-    result2 = number1 * number2
-    st.write(f"乘積:{result2}")
-
 option = st.sidebar.selectbox("選擇一個選項：", ["選項1", "選項2", "選項3"])
-st.write(f"你選擇了：{option}")
+uploaded_file = st.sidebar.file_uploader("上傳影像進行處理...", type=["jpg", "jpeg", "png"])
 
-uploaded_file = st.file_uploader("上傳影像進行處理...", type=["jpg", "jpeg", "png"])
+match option:
+        case "選項1":
+            st.write("你選擇1")
+            # 文字輸入框
+            name1 = st.text_input("請輸入你的名字：", value="你的名字")
+            st.write(f"你好，{name1}！")
+
+            number1 = st.number_input("請輸入數字：", key = "num_1")
+            number2 = st.number_input("請輸入數字：", key = "num_2")
+
+            result1 = number1 + number2
+            st.write(f"和:{result1}")
+
+            # 按鈕
+            if st.button("計算乘積"):
+                result2 = number1 * number2
+                st.write(f"乘積:{result2}")
+            
+        case "選擇2":
+            st.write("你選擇2")
+            
+        case "選擇3":
+            st.write("你選擇3")
+            
 
 #if uploaded_file is not None:
     # 第一步：將上傳的檔案轉為 byte 陣列
