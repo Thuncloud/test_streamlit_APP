@@ -62,7 +62,14 @@ if uploaded_file is not None:
             
         elif step == "二值化處理":
             temp = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY) if len(img_current.shape) == 3 else img_current
-            _, img_current = cv2.threshold(temp, 127, 255, cv2.THRESH_BINARY)
+            thresh = st.slider(
+                    "請選擇透明度：", 
+                    min_value=0, 
+                    max_value=255, 
+                    value=127, 
+                    step=1
+                )
+            _, img_current = cv2.threshold(temp, thresh, 255, cv2.THRESH_BINARY)
 
         elif step == "Hough 直線偵測":
             # 教材重點：Hough 前通常需要先做邊緣偵測 (Canny)
