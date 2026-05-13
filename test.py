@@ -22,7 +22,8 @@ with st.sidebar:
         "中值濾波 (去噪)", 
         "Canny 邊緣檢測", 
         "二值化處理",
-        "Hough 直線偵測"
+        "Hough 直線偵測",
+        "方向性邊緣偵測"
     ]
     
     selected_steps = st.multiselect(
