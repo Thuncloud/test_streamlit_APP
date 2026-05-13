@@ -62,7 +62,7 @@ def display_map_with_bounds(uploaded_file):
     ).add_to(m)
 
     # 3. 限制地圖的最大平移範圍，使用者無法拖出圖片區域
-    m.set_Max_Bounds([[0, 0], [height, width]])
+    m.set_max_bounds([[0, 0], [height, width]])
 
     # 4. 讓地圖初始狀態就完美貼合邊界
     m.fit_bounds([[0, 0], [height, width]])
