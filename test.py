@@ -3,6 +3,40 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
+def apply_butterworth_lowpass(img, d0, n):
+    """
+    實作巴特沃斯低通濾波器 (教材 3-1 頻率域理論)
+    """
+    # 1. 取得影像尺寸並進行傅立葉轉換
+    rows, cols = img.shape
+    crow, ccol = rows // 2, cols // 2
+    
+    # 進行 FFT 並將低頻移至中心
+    f = np.fft.fft2(img)
+    fshift = np.fft.fftshift(f)
+    
+    # 2. 建立頻率域空間網格
+    u = np.linspace(0, rows - 1, rows)
+    v = np.linspace(0, cols - 1, cols)
+    U, V = np.meshgrid(v, u) # 注意 meshgrid 的順序
+    
+    # 計算每個點到中心的距離 D(u,v)
+    dist = np.sqrt((U - ccol)**2 + (V - crow)**2)
+    
+    # 3. 建立巴特沃斯 H(u,v) 矩陣公式
+    # 避免 D 為 0 導致除以零錯誤，設定一個極小值
+    dist = np.where(dist == 0, 1e-5, dist)
+    h = 1 / (1 + (dist / d0)**(2 * n))
+    
+    # 4. 濾波並執行反傅立葉轉換
+    fshift_filtered = fshift * h
+    f_ishift = np.fft.ifftshift(fshift_filtered)
+    img_back = np.fft.ifft2(f_ishift)
+    
+    # 取絕對值並轉回 uint8 格式
+    img_back = np.abs(img_back)
+    return np.uint8(cv2.normalize(img_back, None, 0, 255, cv2.NORM_MINMAX))
+
 # 設定頁面寬度與標題
 st.set_page_config(layout="wide", page_title="AOI 影像處理演算法實驗室")
 
