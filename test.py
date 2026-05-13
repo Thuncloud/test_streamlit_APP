@@ -31,6 +31,8 @@ match option:
             
         case "選擇2":
             st.write("你選擇2")
+                if uploaded_file:
+                     display_map_with_bounds(uploaded_file)
             
         case "選擇3":
             st.write("你選擇3")
@@ -67,6 +69,3 @@ def display_map_with_bounds(uploaded_file):
     m.fit_bounds([[0, 0], [height, width]])
     
     st_folium(m, width="100%", height=600)
-
-if uploaded_file:
-    display_map_with_bounds(uploaded_file)
