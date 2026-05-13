@@ -5,8 +5,8 @@ from streamlit_folium import st_folium
 import folium
 from PIL import Image
 
-st.title("Hello, Streamlit!")
-st.write("這是一個簡單的範例，歡迎來到 Streamlit 的世界！")
+st.title("AOI影像處理")
+st.write("選擇操作模式並上傳圖片")
 
 # 文字輸入框
 name1 = st.text_input("請輸入你的名字：", value="你的名字")
