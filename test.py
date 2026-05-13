@@ -62,7 +62,7 @@ if uploaded_file is not None:
             
         elif step == "二值化處理":
             temp = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY) if len(img_current.shape) == 3 else img_current
-            thresh = st.slider(
+            thresh = st.sidebar.slider(
                     "請選擇透明度：", 
                     min_value=0, 
                     max_value=255, 
