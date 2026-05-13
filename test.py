@@ -5,6 +5,39 @@ from streamlit_folium import st_folium
 import folium
 from PIL import Image
 
+def display_map_with_bounds(uploaded_file):
+    img = Image.open(uploaded_file)
+    width, height = img.size
+    img_array = np.array(img)
+
+    # 在建立 Map 時就設定好邊界
+    m = folium.Map(
+        crs='Simple', 
+        location=[height/2, width/2], 
+        zoom_start=1,
+        min_zoom=0,
+        # 直接在這裡定義最大邊界範圍
+        max_bounds=True, 
+        max_lat=height,
+        min_lat=0,
+        max_lon=width,
+        min_lon=0,
+        tiles=None
+    )
+
+    folium.raster_layers.ImageOverlay(
+        image=img_array,
+        bounds=[[0, 0], [height, width]],
+        opacity=1.0
+    ).add_to(m)
+
+    # 移除會報錯的 m.set_max_bounds(...)
+    # 使用 fit_bounds 確保初始畫面完美貼合
+    m.fit_bounds([[0, 0], [height, width]])
+    
+    st_folium(m, width="100%", height=600)
+
+
 st.title("AOI影像處理")
 st.write("選擇操作模式並上傳圖片")
 
@@ -38,34 +71,3 @@ match option:
             st.write("你選擇3")
             
 
-def display_map_with_bounds(uploaded_file):
-    img = Image.open(uploaded_file)
-    width, height = img.size
-    img_array = np.array(img)
-
-    # 在建立 Map 時就設定好邊界
-    m = folium.Map(
-        crs='Simple', 
-        location=[height/2, width/2], 
-        zoom_start=1,
-        min_zoom=0,
-        # 直接在這裡定義最大邊界範圍
-        max_bounds=True, 
-        max_lat=height,
-        min_lat=0,
-        max_lon=width,
-        min_lon=0,
-        tiles=None
-    )
-
-    folium.raster_layers.ImageOverlay(
-        image=img_array,
-        bounds=[[0, 0], [height, width]],
-        opacity=1.0
-    ).add_to(m)
-
-    # 移除會報錯的 m.set_max_bounds(...)
-    # 使用 fit_bounds 確保初始畫面完美貼合
-    m.fit_bounds([[0, 0], [height, width]])
-    
-    st_folium(m, width="100%", height=600)
