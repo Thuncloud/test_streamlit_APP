@@ -69,7 +69,7 @@ with st.sidebar:
     )
     
     st.divider()
-    do_hist = st.checkbox("顯示像素直方圖分析")
+    do_hist = st.checkbox("顯示像素直方圖分析及頻譜分析圖")
 
 # --- 主畫面邏輯 ---
 st.title("🔬 自動化光學檢測 (AOI) 演算法平台")
