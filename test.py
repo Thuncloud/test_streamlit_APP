@@ -77,8 +77,7 @@ with st.sidebar:
         "圓圈檢測",
         "低通濾波",
         "高通濾波",
-        "帶通/帶拒",
-        "顏色還原 (疊加)"
+        "帶通/帶拒"
     ]
     
     selected_steps = st.multiselect(
@@ -127,20 +126,6 @@ if uploaded_file is not None:
             if len(img_current.shape) == 3:
                 img_current = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY)
 
-        elif step == "顏色還原 (疊加)":
-            # 如果 img_current 是處理後的灰階圖 (例如經過 Sobel 濾波)
-            # 我們可以將它作為「遮罩」與「最原始的彩色圖」進行運算
-            if 'original_image' in st.session_state:
-                # 確保兩者尺寸相同
-                h, w = img_current.shape[:2]
-                orig = cv2.resize(st.session_state['original_image'], (w, h))
-        
-                # 將灰階處理結果轉回 BGR 格式 (三通道)
-                gray_3ch = cv2.cvtColor(img_current, cv2.COLOR_GRAY2BGR)
-        
-                # 利用 addWeighted 進行融合
-                img_current = cv2.addWeighted(orig, 0.7, gray_3ch, 0.3, 0)
-                
         elif step == "二值化處理":
             temp = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY) if len(img_current.shape) == 3 else img_current
             thresh = st.sidebar.slider(
