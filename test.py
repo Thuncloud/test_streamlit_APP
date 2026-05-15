@@ -97,8 +97,15 @@ if uploaded_file is not None:
             img_current = cv2.bitwise_not(img_current)
 
         elif step == "理想低通濾波器":
-            d0 = st.sidebar.slider("d0", 1, 50, 25, step=1)
-            img_current = apply_ideal_lowpass(img_current, d0)
+            d0 = st.sidebar.slider("截止頻率 (D0)", 1, 200, 50)
+    
+            # 關鍵：如果是彩色影像，先轉灰階
+           if len(img_current.shape) == 3:
+                img_input = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY)
+            else:
+                img_input = img_current
+        
+            img_current = apply_ideal_lowpass(img_input, d0)
             
         elif step == "高斯模糊 (濾波)":
             k = st.sidebar.slider("高斯核大小", 1, 15, 5, step=2)
