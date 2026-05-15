@@ -39,6 +39,28 @@ def apply_ideal_lowpass(img, d0):
     img_back = np.abs(img_back)
     return np.uint8(cv2.normalize(img_back, None, 0, 255, cv2.NORM_MINMAX))
 
+def apply_butterworth_lowpass(img, d0, n=2):
+    rows, cols = img.shape[:2]
+    crow, ccol = rows // 2, cols // 2
+    
+    # 建立頻域網格
+    u = np.linspace(0, rows - 1, rows)
+    v = np.linspace(0, cols - 1, cols)
+    V, U = np.meshgrid(v, u)
+    dist = np.sqrt((U - crow)**2 + (V - ccol)**2)
+    
+    # 巴特沃斯公式：1 / (1 + (D/D0)^(2n))
+    # 加上 1e-5 避免除以零
+    h = 1 / (1 + (dist / (d0 + 1e-5))**(2 * n))
+    
+    # 執行濾波 (FFT -> Shift -> Multiply -> IShift -> IFFT)
+    f = np.fft.fft2(img)
+    fshift = np.fft.fftshift(f)
+    fshift_filtered = fshift * h
+    
+    img_back = np.fft.ifft2(np.fft.ifftshift(fshift_filtered))
+    return np.uint8(cv2.normalize(np.abs(img_back), None, 0, 255, cv2.NORM_MINMAX))
+
 # 設定頁面寬度與標題
 st.set_page_config(layout="wide", page_title="AOI 影像處理演算法實驗室")
 
@@ -61,7 +83,8 @@ with st.sidebar:
         "Hough 直線偵測",
         "方向性邊緣偵測",
         "圓圈檢測",
-        "理想低通濾波器"
+        "理想低通濾波器",
+        "巴特沃斯低通濾波器"
     ]
     
     selected_steps = st.multiselect(
@@ -106,6 +129,18 @@ if uploaded_file is not None:
                 img_input = img_current
         
             img_current = apply_ideal_lowpass(img_input, d0)
+
+        elif step == "巴特沃斯低通濾波器":
+            d0 = st.sidebar.slider("截止頻率 (D0)", 1, 200, 50)
+            n = st.sidebar.slider("巴特沃斯 (n)", 1, 5, 2)
+    
+            # 關鍵：如果是彩色影像，先轉灰階
+            if len(img_current.shape) == 3:
+                img_input = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY)
+            else:
+                img_input = img_current
+        
+            img_current = apply_butterworth_lowpass(img_input, d0, n)
             
         elif step == "高斯模糊 (濾波)":
             k = st.sidebar.slider("高斯核大小", 1, 15, 5, step=2)
