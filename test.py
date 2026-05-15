@@ -3,23 +3,22 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
+# ================= 1. 核心演算法定義 (頻域與空域) =================
+
 def get_fft_shift(img):
-    """執行 FFT 並位移至中心"""
+    """執行傅立葉轉換並移至中心"""
     f = np.fft.fft2(img)
     return np.fft.fftshift(f)
 
 def inverse_fft(fshift):
-    """反傅立葉轉換並轉回 uint8"""
+    """執行反傅立葉轉換並正規化輸出"""
     f_ishift = np.fft.ifftshift(fshift)
     img_back = np.fft.ifft2(f_ishift)
-    return np.uint8(cv2.normalize(np.abs(img_back), None, 0, 255, cv2.NORM_MINMAX))
+    img_real = np.abs(img_back)
+    return np.uint8(cv2.normalize(img_real, None, 0, 255, cv2.NORM_MINMAX))
 
-def create_mask(rows, cols, mode="low", filter_type="ideal", d0=30, d1=60, n=2):
-    """
-    建立頻域遮罩 (Mask)
-    filter_type: ideal, gaussian, butterworth
-    mode: low (低通), high (高通), bandpass (帶通), bandreject (帶拒)
-    """
+def create_filter_mask(rows, cols, filter_type, mode, d0, d1=60, n=2):
+    """建立各種頻域濾波器遮罩"""
     crow, ccol = rows // 2, cols // 2
     u = np.linspace(0, rows - 1, rows)
     v = np.linspace(0, cols - 1, cols)
@@ -27,311 +26,153 @@ def create_mask(rows, cols, mode="low", filter_type="ideal", d0=30, d1=60, n=2):
     dist = np.sqrt((U - crow)**2 + (V - ccol)**2)
     dist = np.where(dist == 0, 1e-5, dist) # 避免除以零
 
-    # 1. 建立基本低通 H(u,v)
-    if filter_type == "ideal":
+    # 基本低通 H(u,v)
+    if filter_type == "理想":
         h = np.zeros((rows, cols))
         h[dist <= d0] = 1
-    elif filter_type == "gaussian":
+    elif filter_type == "高斯":
         h = np.exp(-(dist**2) / (2 * (d0**2)))
-    elif filter_type == "butterworth":
+    elif filter_type == "巴特沃斯":
         h = 1 / (1 + (dist / d0)**(2 * n))
 
-    # 2. 根據模式變形
-    if mode == "low":
+    # 模式變換
+    if mode == "低通":
         return h
-    elif mode == "high":
+    elif mode == "高通":
         return 1 - h
-    elif mode == "bandpass":
-        # 帶通 = 高一點的低通 - 低一點的低通
-        # 此處以理想帶通為例，其餘類型邏輯相似
+    elif mode == "帶通":
         mask = np.zeros((rows, cols))
         mask[(dist >= d0) & (dist <= d1)] = 1
         return mask
-    elif mode == "bandreject":
+    elif mode == "帶拒":
         mask = np.ones((rows, cols))
         mask[(dist >= d0) & (dist <= d1)] = 0
         return mask
     return h
 
-# 設定頁面寬度與標題
-st.set_page_config(layout="wide", page_title="AOI 影像處理演算法實驗室")
+# ================= 2. Streamlit 介面佈局 =================
 
-# --- 側邊欄：動態流水線設定 ---
+st.set_page_config(layout="wide")
+st.title("🔬 AOI 影像演算法綜合平台")
+
+# 側邊欄：功能選擇與參數
 with st.sidebar:
-    st.title("🎛️ 演算法控制面板")
-    uploaded_file = st.file_uploader("上傳實驗影像", type=["jpg", "png", "tif"])
+    st.header("演算法控制面板")
+    uploaded_file = st.file_uploader("上傳實驗影像", type=['png', 'jpg', 'tif'])
     
-    st.divider()
-    st.subheader("🧪 處理流程 (可自訂順序)")
-    
-    # 根據教材內容整理的演算法清單
-    step_options = [
-        "轉為灰階", 
-        "顏色翻轉",
-        "高斯模糊 (濾波)", 
-        "中值濾波 (去噪)", 
-        "Canny 邊緣檢測", 
-        "二值化處理",
-        "Hough 直線偵測",
-        "方向性邊緣偵測",
-        "圓圈檢測",
-        "低通濾波",
-        "高通濾波",
-        "帶通/帶拒",
-        "顏色還原 (疊加)"
+    # 根據你的清單整合功能
+    all_steps = [
+        "原影像", "轉為灰階", "二值化", "顏色翻轉",
+        "低通濾波", "高通濾波", "帶通濾波", "帶拒濾波",
+        "Canny邊緣偵測", "霍夫直線", "霍夫圓形"
     ]
-    
-    selected_steps = st.multiselect(
-        "請依序選擇處理步驟：", 
-        step_options,
-        help="演算法執行的先後順序會極大影響 AOI 檢測結果"
-    )
-    
+    selected_steps = st.multiselect("處理流程 (可自訂順序)", all_steps, default=["原影像"])
+
+    # 動態顯示對應參數
     st.divider()
-    do_hist = st.checkbox("顯示像素直方圖分析及頻譜分析圖")
+    filter_type = st.selectbox("濾波器曲線", ["理想", "高斯", "巴特沃斯"])
+    d0 = st.sidebar.slider("截止頻率 (D0)", 1, 200, 30)
+    d1 = st.sidebar.slider("高階截止 (D1, 帶通/帶拒用)", d0, 300, 60)
+    b_n = st.sidebar.slider("巴特沃斯階數 (n)", 1, 5, 2)
+    
+    show_analysis = st.checkbox("顯示直方圖及頻譜分析圖", value=True)
 
-# --- 主畫面邏輯 ---
-st.title("🔬 自動化光學檢測 (AOI) 演算法平台")
+# ================= 3. 主處理邏輯 =================
 
-if uploaded_file is not None:
-    # 1. 影像讀取
+if uploaded_file:
+    # 讀取原始影像
     file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
-    img_original = cv2.imdecode(file_bytes, 1)
-    
-    # 半成品影像承接變數
-    img_current = img_original.copy()
+    img_origin = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+    img_current = img_origin.copy()
 
-    # 2. 依照教材邏輯執行動態流水線
+    # 執行選定的處理步驟
     for step in selected_steps:
-        if step == "Canny 邊緣檢測":
-            # 自動轉灰階防錯
-            temp = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY) if len(img_current.shape) == 3 else img_current
-            t1 = st.sidebar.slider("Canny 低閾值", 0, 255, 50)
-            t2 = st.sidebar.slider("Canny 高閾值", 0, 255, 150)
-            img_current = cv2.Canny(temp, t1, t2)
+        try:
+            if step == "轉為灰階":
+                if len(img_current.shape) == 3:
+                    img_current = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY)
             
-        elif step == "顏色翻轉":
-            img_current = cv2.bitwise_not(img_current)
+            elif step == "二值化":
+                temp_gray = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY) if len(img_current.shape) == 3 else img_current
+                _, img_current = cv2.threshold(temp_gray, 127, 255, cv2.THRESH_BINARY)
             
-        elif step == "高斯模糊 (濾波)":
-            k = st.sidebar.slider("高斯核大小", 1, 15, 5, step=2)
-            sig = st.sidebar.slider("SigmaX", 0.0, 5.0, 0.0)
-            
-            img_current = cv2.GaussianBlur(img_current, (k, k), sig)
-        
-        elif step == "中值濾波 (去噪)":
-            k = st.sidebar.slider("中值濾波核大小", 3, 15, 5, step=2)
-            img_current = cv2.medianBlur(img_current, k)
-            
-        elif step == "轉為灰階":
-            if len(img_current.shape) == 3:
-                img_current = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY)
+            elif step == "顏色翻轉":
+                img_current = cv2.bitwise_not(img_current)
 
-        elif step == "顏色還原 (疊加)":
-            # 如果 img_current 是處理後的灰階圖 (例如經過 Sobel 濾波)
-            # 我們可以將它作為「遮罩」與「最原始的彩色圖」進行運算
-            if 'original_image' in st.session_state:
-                # 確保兩者尺寸相同
-                h, w = img_current.shape[:2]
-                orig = cv2.resize(st.session_state['original_image'], (w, h))
-        
-                # 將灰階處理結果轉回 BGR 格式 (三通道)
-                gray_3ch = cv2.cvtColor(img_current, cv2.COLOR_GRAY2BGR)
-        
-                # 利用 addWeighted 進行融合
-                img_current = cv2.addWeighted(orig, 0.7, gray_3ch, 0.3, 0)
+            elif step in ["低通濾波", "高通濾波", "帶通濾波", "帶拒濾波"]:
+                # 強制轉灰階處理
+                if len(img_current.shape) == 3:
+                    img_current = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY)
                 
-        elif step == "二值化處理":
-            temp = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY) if len(img_current.shape) == 3 else img_current
-            thresh = st.sidebar.slider(
-                    "thresh:", 
-                    min_value=0, 
-                    max_value=255, 
-                    value=127, 
-                    step=1
-                )
-            _, img_current = cv2.threshold(temp, thresh, 255, cv2.THRESH_BINARY)
+                mode_name = step.replace("濾波", "")
+                fshift = get_fft_shift(img_current)
+                mask = create_filter_mask(img_current.shape[0], img_current.shape[1], filter_type, mode_name, d0, d1, b_n)
+                img_current = inverse_fft(fshift * mask)
 
-        elif step == "Hough 直線偵測":
-            # 教材重點：Hough 前通常需要先做邊緣偵測 (Canny)
-            # 如果目前影像不是二值圖或邊緣圖，先內部處理
-            if len(img_current.shape) == 3:
-                gray = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY)
-                edges = cv2.Canny(gray, 50, 150)
-            else:
-                edges = img_current
-            
-            # 建立彩色底圖畫線
-            h_thresh = st.sidebar.slider("Hough 投票閾值", 10, 200, 100)
-            min_len = st.sidebar.slider("最小線段長度", 1, 200, 50)
-            max_gap = st.sidebar.slider("最大線段間隙", 1, 50, 10)
-            
-            line_img = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR) if len(edges.shape) == 2 else edges.copy()
-            lines = cv2.HoughLinesP(edges, 1, np.pi/180, h_thresh, minLineLength=min_len, maxLineGap=max_gap)
-            
-            if lines is not None:
-                for line in lines:
-                    x1, y1, x2, y2 = line[0]
-                    cv2.line(line_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            img_current = line_img
+            elif step == "Canny邊緣偵測":
+                img_current = cv2.Canny(img_current, 100, 200)
 
-        elif step == "圓圈檢測":
-            # 1. 前處理 (圓檢測對雜訊極敏感，必須平滑化)
-            gray = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY) if len(img_current.shape) == 3 else img_current
-            # 教材重點：使用高斯模糊降噪
-            blurred = cv2.GaussianBlur(gray, (9, 9), 2)
-    
-            # 2. 側邊欄控制
-            p2 = st.sidebar.slider("圓心投票閾值 (param2)", 10, 100, 30)
-            min_dist = st.sidebar.slider("圓心最小距離", 10, 200, 50)
-            r_limit = st.sidebar.slider("半徑範圍", 0, 500, (10, 100))
-    
-            # 3. 執行偵測
-            circles = cv2.HoughCircles(
-                blurred, cv2.HOUGH_GRADIENT, dp=1, 
-                minDist=min_dist, param1=100, param2=p2, 
-                minRadius=r_limit[0], maxRadius=r_limit[1]
-            )
-    
-            # 4. 繪製結果
-            res_img = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
-            if circles is not None:
-                circles = np.uint16(np.around(circles))
-                for i in circles[0, :]:
-                    # 畫外圓 (綠色)
-                    cv2.circle(res_img, (i[0], i[1]), i[2], (0, 255, 0), 2)
-                    # 畫圓心 (紅色)
-                    cv2.circle(res_img, (i[0], i[1]), 2, (0, 0, 255), 3)
-                    
-            img_current = res_img
+            elif step == "霍夫直線":
+                # 霍夫變換通常需要 Canny 邊緣
+                edges = cv2.Canny(img_current, 50, 150)
+                lines = cv2.HoughLinesP(edges, 1, np.pi/180, 100, minLineLength=50, maxLineGap=10)
+                res = cv2.cvtColor(img_current, cv2.COLOR_GRAY2BGR) if len(img_current.shape)==2 else img_current.copy()
+                if lines is not None:
+                    for line in lines:
+                        x1, y1, x2, y2 = line[0]
+                        cv2.line(res, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                img_current = res
 
-        elif step in ["低通濾波", "高通濾波", "帶通/帶拒"]:
-            # 確保灰階
-            img_gray = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY) if len(img_current.shape) == 3 else img_current
-            rows, cols = img_gray.shape
-    
-            # 側邊欄控制
-            f_type = st.sidebar.radio("濾波器類型", ["ideal", "gaussian", "butterworth"])
-            mode = "low" if step == "低通濾波" else "high" if step == "高通濾波" else st.sidebar.radio("模式", ["bandpass", "bandreject"])
-    
-            d0 = st.sidebar.slider("截止頻率 (D0)", 1, 300, 30)
-            d1 = st.sidebar.slider("高階截止 (D1, 僅限帶通/帶拒)", d0, 300, 60)
-            n = st.sidebar.slider("巴特沃斯階數 (n)", 1, 5, 2)
+            elif step == "霍夫圓形":
+                temp_gray = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY) if len(img_current.shape) == 3 else img_current
+                blurred = cv2.medianBlur(temp_gray, 5)
+                circles = cv2.HoughCircles(blurred, cv2.HOUGH_GRADIENT, 1, 20, param1=50, param2=30, minRadius=0, maxRadius=0)
+                res = cv2.cvtColor(img_current, cv2.COLOR_GRAY2BGR) if len(img_current.shape)==2 else img_current.copy()
+                if circles is not None:
+                    circles = np.uint16(np.around(circles))
+                    for i in circles[0, :]:
+                        cv2.circle(res, (i[0], i[1]), i[2], (0, 255, 0), 2)
+                img_current = res
+
+        except Exception as e:
+            st.error(f"步驟 '{step}' 執行出錯: {e}")
+
+    # ================= 4. 結果顯示區 =================
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("🖼️ 原影像")
+        st.image(img_origin, channels="BGR")
+    with col2:
+        st.subheader("✨ 處理後影像")
+        # 判斷是否為黑白或彩色顯示
+        st.image(img_current)
+
+    if show_analysis:
+        st.divider()
+        col_hist, col_fft = st.columns(2)
         
-            # 執行頻域運算 
-            fshift = get_fft_shift(img_gray)
-            mask = create_mask(rows, cols, mode, f_type, d0, d1, n)
-            img_current = inverse_fft(fshift * mask)
-
-        elif step == "方向性邊緣偵測":
-            # 1. 確保灰階處理
-            temp = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY) if len(img_current.shape) == 3 else img_current
-    
-            # 2. 側邊欄控制項
-            direction = st.sidebar.selectbox("選擇偵測方向", ["水平 (0°)", "垂直 (90°)", "垂直 + 水平", "+45°", "-45°"])
-    
-            # 這裡加入拉桿參數
-            # alpha 分配權重 (0.0 為純水平, 1.0 為純垂直)
-            blend_weight = st.sidebar.slider("水平/垂直融合比例", 0.0, 1.0, 0.5)
-            # brightness 補償 (有時候過濾完太暗，可以手動調亮)
-            brightness_offset = st.sidebar.slider("邊緣亮度補償", 0, 100, 0)
-    
-            # 3. 定義卷積核 (Kernels)
-            h_kernel = np.array([[-1, -1, -1], [ 2,  2,  2], [-1, -1, -1]])
-            v_kernel = np.array([[-1,  2, -1], [-1,  2, -1], [-1,  2, -1]])
-            p45_kernel = np.array([[-1, -1,  2], [-1,  2, -1], [ 2, -1, -1]])
-            m45_kernel = np.array([[ 2, -1, -1], [-1,  2, -1], [-1, -1,  2]])
-    
-            # 4. 運算邏輯
-            if direction == "垂直 + 水平":
-                # 教材重點：使用 CV_16S 避免負值被歸零
-                res_h = cv2.filter2D(temp, cv2.CV_16S, h_kernel)
-                res_v = cv2.filter2D(temp, cv2.CV_16S, v_kernel)
-                
-                abs_h = cv2.convertScaleAbs(res_h)
-                abs_v = cv2.convertScaleAbs(res_v)
-        
-                # 利用拉桿調整混合比例：dst = src1*alpha + src2*beta + gamma
-                # 我們讓 alpha = 1 - blend_weight, beta = blend_weight
-                img_current = cv2.addWeighted(abs_h, 1 - blend_weight, abs_v, blend_weight, brightness_offset)
-        
-            else:
-                # 單一方向偵測
-                if direction == "水平 (0°)": curr_kernel = h_kernel
-                elif direction == "垂直 (90°)": curr_kernel = v_kernel
-                elif direction == "+45°": curr_kernel = p45_kernel
-                elif direction == "-45°": curr_kernel = m45_kernel
-        
-                # 執行濾波並補償亮度
-                filtered = cv2.filter2D(temp, cv2.CV_16S, curr_kernel)
-                img_current = cv2.convertScaleAbs(filtered + brightness_offset)
-
-    # 3. 顯示區塊
-    col_left, col_right = st.columns([2, 1])
-
-    with col_left:
-        st.subheader("🖼️ 影像對比結果")
-        if selected_steps:
-            st.caption(f"執行路徑: 原圖 ➔ {' ➔ '.join(selected_steps)}")
-        
-        # 建立內部分欄：左邊放原圖，右邊放處理後的圖
-        sub_col_orig, sub_col_proc = st.columns(2)
-        
-        with sub_col_orig:
-            # 準備原圖 (需轉為 RGB 顏色才正確)
-            img_orig_rgb = cv2.cvtColor(img_original, cv2.COLOR_BGR2RGB)
-            st.image(img_orig_rgb, caption="原始影像 (Original)", use_container_width=True)
-            
-        with sub_col_proc:
-            # 準備處理後的影像
-            if len(img_current.shape) == 3:
-                display_img = cv2.cvtColor(img_current, cv2.COLOR_BGR2RGB)
-            else:
-                display_img = img_current
-            st.image(display_img, caption="處理後影像 (Processed)", use_container_width=True)
-
-    with col_right:
-        if do_hist:
+        with col_hist:
             st.subheader("📊 像素直方圖")
-            # 注意：這裡顯示的是「處理後影像」的直方圖，這對觀察濾波效果很有幫助
-            fig, ax = plt.subplots()
+            fig_h, ax_h = plt.subplots()
+            # 處理多通道或單通道直方圖
             if len(img_current.shape) == 2:
-                # 繪製灰階直方圖 (使用教材提到的 ravel() 扁平化處理)
-                ax.hist(img_current.ravel(), 256, [0, 256], color='black')
-                ax.set_title("Grayscale Histogram")
+                ax_h.hist(img_current.ravel(), 256, [0, 256], color='gray')
             else:
-                # 繪製彩色直方圖
                 for i, col in enumerate(['b', 'g', 'r']):
                     hist = cv2.calcHist([img_current], [i], None, [256], [0, 256])
-                    ax.plot(hist, color=col)
-                ax.set_title("RGB Histogram")
-            
-            ax.set_xlim([0, 256])
-            st.pyplot(fig)
-            
+                    ax_h.plot(hist, color=col)
+            st.pyplot(fig_h)
+
+        with col_fft:
             st.subheader("🌌 頻域分析 (FFT)")
-            # 1. 確保影像是灰階才能做 FFT
-            if len(img_current.shape) == 3:
-                fft_input = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY)
-            else:
-                fft_input = img_current
-        
-            # 2. 執行傅立葉轉換
-            f = np.fft.fft2(fft_input)
-            fshift = np.fft.fftshift(f) # 將低頻位移至中心
-            
-            # 3. 計算振幅譜 (Magnitude Spectrum)
-            # 取絕對值後加上 log 轉換，否則中心點太亮會看不到細節
-            magnitude_spectrum = 20 * np.log(np.abs(fshift) + 1)
-    
-            # 4. 顯示圖表
-            fig_fft, ax_fft = plt.subplots()
-            ax_fft.imshow(magnitude_spectrum, cmap='gray')
-            ax_fft.set_title('Frequency Spectrum')
-            ax_fft.axis('off') # 隱藏座標軸比較美觀
-            st.pyplot(fig_fft)
-        else:
-            st.info("👈 勾選側邊欄可查看處理後的數據分佈。")
+            temp_fft = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY) if len(img_current.shape) == 3 else img_current
+            f_shift = get_fft_shift(temp_fft)
+            mag_spec = 20 * np.log(np.abs(f_shift) + 1)
+            fig_f, ax_f = plt.subplots()
+            ax_f.imshow(mag_spec, cmap='gray')
+            ax_f.axis('off')
+            st.pyplot(fig_f)
 
 else:
-    st.warning("請先上傳圖片以開始 AOI 演算法測試。")
+    st.info("請上傳影像以開始處理。")
