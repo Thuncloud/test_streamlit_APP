@@ -3,93 +3,55 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
-def apply_ideal_lowpass(img, d0):
-    """
-    實作理想低通濾波器 (Ideal Lowpass Filter)
-    """
-    # 1. 取得影像尺寸並執行傅立葉轉換
-    rows, cols = img.shape
-    crow, ccol = rows // 2, cols // 2
-    
-    # 進行 FFT 並移至中心
+def get_fft_shift(img):
+    """執行 FFT 並位移至中心"""
     f = np.fft.fft2(img)
-    fshift = np.fft.fftshift(f)
-    
-    # 2. 建立理想低通遮罩 (Mask)
-    # 建立與原圖相同尺寸的黑色畫布 (全為 0)
-    mask = np.zeros((rows, cols), np.uint8)
-    
-    # 計算每個點到中心點 (crow, ccol) 的距離
-    # 只有距離小於 d0 的區域設為 1 (白色)
-    u = np.linspace(0, rows - 1, rows)
-    v = np.linspace(0, cols - 1, cols)
-    U, V = np.meshgrid(v, u)
-    dist = np.sqrt((U - ccol)**2 + (V - crow)**2)
-    
-    mask[dist <= d0] = 1
-    
-    # 3. 執行濾波 (頻譜圖直接與遮罩相乘)
-    fshift_filtered = fshift * mask
-    
-    # 4. 反傅立葉轉換回空間域
-    f_ishift = np.fft.ifftshift(fshift_filtered)
-    img_back = np.fft.ifft2(f_ishift)
-    
-    # 取絕對值並正規化回 0-255
-    img_back = np.abs(img_back)
-    return np.uint8(cv2.normalize(img_back, None, 0, 255, cv2.NORM_MINMAX))
+    return np.fft.fftshift(f)
 
-def apply_butterworth_lowpass(img, d0, n=2):
-    rows, cols = img.shape[:2]
+def inverse_fft(fshift):
+    """反傅立葉轉換並轉回 uint8"""
+    f_ishift = np.fft.ifftshift(fshift)
+    img_back = np.fft.ifft2(f_ishift)
+    return np.uint8(cv2.normalize(np.abs(img_back), None, 0, 255, cv2.NORM_MINMAX))
+
+def create_mask(rows, cols, mode="low", filter_type="ideal", d0=30, d1=60, n=2):
+    """
+    建立頻域遮罩 (Mask)
+    filter_type: ideal, gaussian, butterworth
+    mode: low (低通), high (高通), bandpass (帶通), bandreject (帶拒)
+    """
     crow, ccol = rows // 2, cols // 2
-    
-    # 建立頻域網格
     u = np.linspace(0, rows - 1, rows)
     v = np.linspace(0, cols - 1, cols)
     V, U = np.meshgrid(v, u)
     dist = np.sqrt((U - crow)**2 + (V - ccol)**2)
-    
-    # 巴特沃斯公式：1 / (1 + (D/D0)^(2n))
-    # 加上 1e-5 避免除以零
-    h = 1 / (1 + (dist / (d0 + 1e-5))**(2 * n))
-    
-    # 執行濾波 (FFT -> Shift -> Multiply -> IShift -> IFFT)
-    f = np.fft.fft2(img)
-    fshift = np.fft.fftshift(f)
-    fshift_filtered = fshift * h
-    
-    img_back = np.fft.ifft2(np.fft.ifftshift(fshift_filtered))
-    return np.uint8(cv2.normalize(np.abs(img_back), None, 0, 255, cv2.NORM_MINMAX))
+    dist = np.where(dist == 0, 1e-5, dist) # 避免除以零
 
-def apply_gaussian_lowpass(img, d0):
-    """
-    實作高斯低通濾波器 (Gaussian Lowpass Filter)
-    """
-    rows, cols = img.shape[:2]
-    crow, ccol = rows // 2, cols // 2
-    
-    # 1. 執行傅立葉轉換
-    f = np.fft.fft2(img)
-    fshift = np.fft.fftshift(f)
-    
-    # 2. 建立高斯遮罩
-    u = np.linspace(0, rows - 1, rows)
-    v = np.linspace(0, cols - 1, cols)
-    V, U = np.meshgrid(v, u)
-    dist_sq = (U - crow)**2 + (V - ccol)**2
-    
-    # 高斯公式：exp(-D^2 / (2 * D0^2))
-    h = np.exp(-dist_sq / (2 * (d0**2)))
-    
-    # 3. 濾波
-    fshift_filtered = fshift * h
-    
-    # 4. 反轉換回空間域
-    img_back = np.fft.ifft2(np.fft.ifftshift(fshift_filtered))
-    img_real = np.abs(img_back)
-    
-    # 正規化輸出
-    return np.uint8(cv2.normalize(img_real, None, 0, 255, cv2.NORM_MINMAX))
+    # 1. 建立基本低通 H(u,v)
+    if filter_type == "ideal":
+        h = np.zeros((rows, cols))
+        h[dist <= d0] = 1
+    elif filter_type == "gaussian":
+        h = np.exp(-(dist**2) / (2 * (d0**2)))
+    elif filter_type == "butterworth":
+        h = 1 / (1 + (dist / d0)**(2 * n))
+
+    # 2. 根據模式變形
+    if mode == "low":
+        return h
+    elif mode == "high":
+        return 1 - h
+    elif mode == "bandpass":
+        # 帶通 = 高一點的低通 - 低一點的低通
+        # 此處以理想帶通為例，其餘類型邏輯相似
+        mask = np.zeros((rows, cols))
+        mask[(dist >= d0) & (dist <= d1)] = 1
+        return mask
+    elif mode == "bandreject":
+        mask = np.ones((rows, cols))
+        mask[(dist >= d0) & (dist <= d1)] = 0
+        return mask
+    return h
 
 # 設定頁面寬度與標題
 st.set_page_config(layout="wide", page_title="AOI 影像處理演算法實驗室")
@@ -113,9 +75,9 @@ with st.sidebar:
         "Hough 直線偵測",
         "方向性邊緣偵測",
         "圓圈檢測",
-        "理想低通濾波器",
-        "巴特沃斯低通濾波器",
-        "高斯低通濾波器"
+        "低通濾波",
+        "高通濾波",
+        "帶通/帶拒"
     ]
     
     selected_steps = st.multiselect(
@@ -149,40 +111,6 @@ if uploaded_file is not None:
             
         elif step == "顏色翻轉":
             img_current = cv2.bitwise_not(img_current)
-
-        elif step == "理想低通濾波器":
-            d0 = st.sidebar.slider("截止頻率 (D0)", 1, 200, 50)
-    
-            # 關鍵：如果是彩色影像，先轉灰階
-            if len(img_current.shape) == 3:
-                img_input = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY)
-            else:
-                img_input = img_current
-        
-            img_current = apply_ideal_lowpass(img_input, d0)
-
-        elif step == "巴特沃斯低通濾波器":
-            d0 = st.sidebar.slider("截止頻率 (D0)", 1, 200, 50)
-            n = st.sidebar.slider("巴特沃斯 (n)", 1, 5, 2)
-    
-            # 關鍵：如果是彩色影像，先轉灰階
-            if len(img_current.shape) == 3:
-                img_input = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY)
-            else:
-                img_input = img_current
-        
-            img_current = apply_butterworth_lowpass(img_input, d0, n)
-
-        elif step == "高斯低通濾波器":
-            d0 = st.sidebar.slider("截止頻率 (D0)", 1, 200, 50)
-    
-            # 關鍵：如果是彩色影像，先轉灰階
-            if len(img_current.shape) == 3:
-                img_input = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY)
-            else:
-                img_input = img_current
-        
-            img_current = apply_gaussian_lowpass(img_input, d0)
             
         elif step == "高斯模糊 (濾波)":
             k = st.sidebar.slider("高斯核大小", 1, 15, 5, step=2)
@@ -262,6 +190,24 @@ if uploaded_file is not None:
                     
             img_current = res_img
 
+        elif step in ["低通濾波", "高通濾波", "帶通/帶拒"]:
+            # 確保灰階
+            img_gray = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY) if len(img_current.shape) == 3 else img_current
+            rows, cols = img_gray.shape
+    
+            # 側邊欄控制
+            f_type = st.sidebar.radio("濾波器類型", ["ideal", "gaussian", "butterworth"])
+            mode = "low" if step == "低通濾波" else "high" if step == "高通濾波" else st.sidebar.radio("模式", ["bandpass", "bandreject"])
+    
+            d0 = st.sidebar.slider("截止頻率 (D0)", 1, 300, 30)
+            d1 = st.sidebar.slider("高階截止 (D1, 僅限帶通/帶拒)", d0, 300, 60)
+            n = st.sidebar.slider("巴特沃斯階數 (n)", 1, 5, 2)
+        
+            # 執行頻域運算 
+            fshift = get_fft_shift(img_gray)
+            mask = create_mask(rows, cols, mode, f_type, d0, d1, n)
+            img_current = inverse_fft(fshift * mask)
+
         elif step == "方向性邊緣偵測":
             # 1. 確保灰階處理
             temp = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY) if len(img_current.shape) == 3 else img_current
@@ -304,6 +250,8 @@ if uploaded_file is not None:
                 # 執行濾波並補償亮度
                 filtered = cv2.filter2D(temp, cv2.CV_16S, curr_kernel)
                 img_current = cv2.convertScaleAbs(filtered + brightness_offset)
+
+    
             
     
 
