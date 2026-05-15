@@ -100,7 +100,7 @@ if uploaded_file is not None:
             d0 = st.sidebar.slider("截止頻率 (D0)", 1, 200, 50)
     
             # 關鍵：如果是彩色影像，先轉灰階
-           if len(img_current.shape) == 3:
+            if len(img_current.shape) == 3:
                 img_input = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY)
             else:
                 img_input = img_current
