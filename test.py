@@ -77,7 +77,8 @@ with st.sidebar:
         "圓圈檢測",
         "低通濾波",
         "高通濾波",
-        "帶通/帶拒"
+        "帶通/帶拒",
+        "顏色還原 (疊加)"
     ]
     
     selected_steps = st.multiselect(
