@@ -61,6 +61,36 @@ def apply_butterworth_lowpass(img, d0, n=2):
     img_back = np.fft.ifft2(np.fft.ifftshift(fshift_filtered))
     return np.uint8(cv2.normalize(np.abs(img_back), None, 0, 255, cv2.NORM_MINMAX))
 
+def apply_gaussian_lowpass(img, d0):
+    """
+    實作高斯低通濾波器 (Gaussian Lowpass Filter)
+    """
+    rows, cols = img.shape[:2]
+    crow, ccol = rows // 2, cols // 2
+    
+    # 1. 執行傅立葉轉換
+    f = np.fft.fft2(img)
+    fshift = np.fft.fftshift(f)
+    
+    # 2. 建立高斯遮罩
+    u = np.linspace(0, rows - 1, rows)
+    v = np.linspace(0, cols - 1, cols)
+    V, U = np.meshgrid(v, u)
+    dist_sq = (U - crow)**2 + (V - ccol)**2
+    
+    # 高斯公式：exp(-D^2 / (2 * D0^2))
+    h = np.exp(-dist_sq / (2 * (d0**2)))
+    
+    # 3. 濾波
+    fshift_filtered = fshift * h
+    
+    # 4. 反轉換回空間域
+    img_back = np.fft.ifft2(np.fft.ifftshift(fshift_filtered))
+    img_real = np.abs(img_back)
+    
+    # 正規化輸出
+    return np.uint8(cv2.normalize(img_real, None, 0, 255, cv2.NORM_MINMAX))
+
 # 設定頁面寬度與標題
 st.set_page_config(layout="wide", page_title="AOI 影像處理演算法實驗室")
 
@@ -84,7 +114,8 @@ with st.sidebar:
         "方向性邊緣偵測",
         "圓圈檢測",
         "理想低通濾波器",
-        "巴特沃斯低通濾波器"
+        "巴特沃斯低通濾波器",
+        "高斯低通濾波器"
     ]
     
     selected_steps = st.multiselect(
@@ -141,6 +172,17 @@ if uploaded_file is not None:
                 img_input = img_current
         
             img_current = apply_butterworth_lowpass(img_input, d0, n)
+
+        elif step == "高斯低通濾波器":
+            d0 = st.sidebar.slider("截止頻率 (D0)", 1, 200, 50)
+    
+            # 關鍵：如果是彩色影像，先轉灰階
+            if len(img_current.shape) == 3:
+                img_input = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY)
+            else:
+                img_input = img_current
+        
+            img_current = apply_gaussian_lowpass(img_input, d0)
             
         elif step == "高斯模糊 (濾波)":
             k = st.sidebar.slider("高斯核大小", 1, 15, 5, step=2)
