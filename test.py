@@ -172,15 +172,6 @@ if uploaded_file is not None:
                     
             img_current = res_img
 
-        elif step == "消除摩爾紋 (巴特沃斯)":
-            temp = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY) if len(img_current.shape) == 3 else img_current
-    
-            # 調整 D0 是關鍵！ 
-            # 摩爾紋頻率很高，所以 D0 要設得比較小 (例如 20-40)
-            d0_val = st.sidebar.slider("濾波強度 (D0 越小越模糊)", 10, 100, 30)
-    
-            img_current = apply_butterworth_lowpass(temp, d0=d0_val, n=2)
-            
         elif step == "方向性邊緣偵測":
             # 1. 確保灰階處理
             temp = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY) if len(img_current.shape) == 3 else img_current
@@ -268,6 +259,28 @@ if uploaded_file is not None:
             
             ax.set_xlim([0, 256])
             st.pyplot(fig)
+            
+            st.subheader("🌌 頻域分析 (FFT)")
+            # 1. 確保影像是灰階才能做 FFT
+            if len(img_current.shape) == 3:
+                fft_input = cv2.cvtColor(img_current, cv2.COLOR_BGR2GRAY)
+            else:
+                fft_input = img_current
+        
+            # 2. 執行傅立葉轉換
+            f = np.fft.fft2(fft_input)
+            fshift = np.fft.fftshift(f) # 將低頻位移至中心
+            
+            # 3. 計算振幅譜 (Magnitude Spectrum)
+            # 取絕對值後加上 log 轉換，否則中心點太亮會看不到細節
+            magnitude_spectrum = 20 * np.log(np.abs(fshift) + 1)
+    
+            # 4. 顯示圖表
+            fig_fft, ax_fft = plt.subplots()
+            ax_fft.imshow(magnitude_spectrum, cmap='gray')
+            ax_fft.set_title('Frequency Spectrum')
+            ax_fft.axis('off') # 隱藏座標軸比較美觀
+            st.pyplot(fig_fft)
         else:
             st.info("👈 勾選側邊欄可查看處理後的數據分佈。")
 
