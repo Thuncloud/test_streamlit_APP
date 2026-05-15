@@ -3,6 +3,42 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 
+def apply_ideal_lowpass(img, d0):
+    """
+    實作理想低通濾波器 (Ideal Lowpass Filter)
+    """
+    # 1. 取得影像尺寸並執行傅立葉轉換
+    rows, cols = img.shape
+    crow, ccol = rows // 2, cols // 2
+    
+    # 進行 FFT 並移至中心
+    f = np.fft.fft2(img)
+    fshift = np.fft.fftshift(f)
+    
+    # 2. 建立理想低通遮罩 (Mask)
+    # 建立與原圖相同尺寸的黑色畫布 (全為 0)
+    mask = np.zeros((rows, cols), np.uint8)
+    
+    # 計算每個點到中心點 (crow, ccol) 的距離
+    # 只有距離小於 d0 的區域設為 1 (白色)
+    u = np.linspace(0, rows - 1, rows)
+    v = np.linspace(0, cols - 1, cols)
+    U, V = np.meshgrid(v, u)
+    dist = np.sqrt((U - ccol)**2 + (V - crow)**2)
+    
+    mask[dist <= d0] = 1
+    
+    # 3. 執行濾波 (頻譜圖直接與遮罩相乘)
+    fshift_filtered = fshift * mask
+    
+    # 4. 反傅立葉轉換回空間域
+    f_ishift = np.fft.ifftshift(fshift_filtered)
+    img_back = np.fft.ifft2(f_ishift)
+    
+    # 取絕對值並正規化回 0-255
+    img_back = np.abs(img_back)
+    return np.uint8(cv2.normalize(img_back, None, 0, 255, cv2.NORM_MINMAX))
+
 # 設定頁面寬度與標題
 st.set_page_config(layout="wide", page_title="AOI 影像處理演算法實驗室")
 
@@ -25,7 +61,7 @@ with st.sidebar:
         "Hough 直線偵測",
         "方向性邊緣偵測",
         "圓圈檢測",
-        "消除摩爾紋 (巴特沃斯)"
+        "理想低通濾波器"
     ]
     
     selected_steps = st.multiselect(
@@ -59,6 +95,10 @@ if uploaded_file is not None:
             
         elif step == "顏色翻轉":
             img_current = cv2.bitwise_not(img_current)
+
+        elif step == "理想低通濾波器":
+            d0 = st.sidebar.slider("d0", 1, 50, 25, step=1)
+            img_current = apply_ideal_lowpass(img_current, d0)
             
         elif step == "高斯模糊 (濾波)":
             k = st.sidebar.slider("高斯核大小", 1, 15, 5, step=2)
