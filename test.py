@@ -251,10 +251,6 @@ if uploaded_file is not None:
                 filtered = cv2.filter2D(temp, cv2.CV_16S, curr_kernel)
                 img_current = cv2.convertScaleAbs(filtered + brightness_offset)
 
-    
-            
-    
-
     # 3. 顯示區塊
     col_left, col_right = st.columns([2, 1])
 
