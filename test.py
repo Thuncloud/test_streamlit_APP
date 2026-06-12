@@ -46,7 +46,7 @@ def create_mask(rows, cols, mode="low", filter_type="ideal", d0=30, d1=60, n=2):
     return h
 
 def ensure_grayscale(img):
-    """工具函式：確保影像為單通道灰階圖"""
+    """工具函式：確保影像為單通道灰階圖（二值化前置防錯）"""
     return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img
 
 
@@ -55,7 +55,6 @@ def ensure_grayscale(img):
 # ==========================================
 st.set_page_config(layout="wide", page_title="AOI 影像處理演算法實驗室")
 
-# 【方案 A 核心】：在記憶體中初始化一個列表，用來儲存排定的演算法順序
 if "pipeline" not in st.session_state:
     st.session_state.pipeline = []
 
@@ -79,6 +78,7 @@ with st.sidebar:
             
     # --- 分類 2：邊緣與特徵提取 ---
     with st.expander("📐 2. 空間域與特徵偵測", expanded=False):
+        # 這裡的選項保留「二值化處理」，我們在主畫面執行時再用拉桿區分固定或自適應
         opt_feat = st.selectbox("選擇特徵偵測：", ["請選擇...", "Canny 邊緣檢測", "二值化處理", "Hough 直線偵測", "方向性邊緣偵測", "圓圈檢測"], key="sel_feat")
         if st.button("➕ 加入流水線", key="btn_feat") and opt_feat != "請選擇...":
             st.session_state.pipeline.append(opt_feat)
@@ -94,24 +94,16 @@ with st.sidebar:
     st.subheader("📋 目前排定的 AOI 流程")
     
     if st.session_state.pipeline:
-        # 遍歷目前所有步驟，並為每個步驟建立一個獨立的整行容器
         for idx, step in enumerate(st.session_state.pipeline):
-            # 建立兩欄：左邊顯示步驟名稱（較寬），右邊放刪除按鈕（較窄）
             col_step_name, col_step_del = st.columns([4, 1])
-            
             with col_step_name:
                 st.markdown(f"**{idx + 1}.** {step}")
-            
             with col_step_del:
-                # 關鍵點：每個按鈕的 key 必須是唯一的（這裡用 idx 區隔），否則 Streamlit 會報錯
                 if st.button("❌", key=f"del_{idx}", help=f"移除第 {idx+1} 步：{step}"):
-                    # 從列表中移除該特定索引的步驟
                     st.session_state.pipeline.pop(idx)
-                    # 移除後立即重新整理網頁，讓畫面即時更新
                     st.rerun()
         
-        st.write("") # 留一點空白
-        # 保留一個一鍵全清空的備用按鈕（改為次要樣式）
+        st.write("")
         if st.button("🔄 重設所有步驟", type="secondary", use_container_width=True):
             st.session_state.pipeline = []
             st.rerun()
@@ -128,12 +120,11 @@ with st.sidebar:
 st.title("🔬 自動化光學檢測 (AOI) 演算法平台")
 
 if uploaded_file is not None:
-    # 讀取原始影像
     file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
     img_original = cv2.imdecode(file_bytes, 1)
     img_current = img_original.copy()
 
-    # 【方案 A 修改處】：直接讀取 session_state.pipeline 裡面的步驟順序來跑 OpenCV
+    # 執行工作流
     for step in st.session_state.pipeline:
         
         if step == "轉為灰階":
@@ -158,9 +149,33 @@ if uploaded_file is not None:
             img_current = cv2.Canny(temp, t1, t2)
             
         elif step == "二值化處理":
+            # 【新功能升級】：提供固定與自適應二值化切換
             temp = ensure_grayscale(img_current)
-            thresh = st.sidebar.slider("二值化門檻值", 0, 255, 127)
-            _, img_current = cv2.threshold(temp, thresh, 255, cv2.THRESH_BINARY)
+            
+            st.sidebar.markdown("---")
+            bin_type = st.sidebar.radio("二值化模式", ["傳統固定門檻", "自適應門檻 (過濾亮度干擾)"])
+            
+            if bin_type == "傳統固定門檻":
+                thresh = st.sidebar.slider("二值化門檻值", 0, 255, 127)
+                _, img_current = cv2.threshold(temp, thresh, 255, cv2.THRESH_BINARY)
+            
+            elif bin_type == "自適應門檻 (過濾亮度干擾)":
+                # 1. 選擇自適應方法：MEAN 較快，GAUSSIAN 在漸層或自然光下邊緣更細膩平滑
+                method_opt = st.sidebar.selectbox("自適應計算方法", ["區域平均加權 (MEAN)", "高斯分佈加權 (GAUSSIAN)"])
+                adaptive_method = cv2.ADAPTIVE_THRESH_MEAN_C if "MEAN" in method_opt else cv2.ADAPTIVE_THRESH_GAUSSIAN_C
+                
+                # 2. Block Size 區域大小：決定考慮多大的周邊鄰域。必須是奇數！
+                block_size = st.sidebar.slider("局部核大小 (Block Size)", 3, 99, 11, step=2)
+                st.sidebar.caption("調整檢測局部特徵的範圍，大圖通常調大，小特徵調小。")
+                
+                # 3. 常數 C：從平均值或加權平均值中減去的常數。可以微調去除環境背噪
+                c_value = st.sidebar.slider("微調常數 (C)", -20, 20, 2)
+                st.sidebar.caption("正值會使黑點變多（過濾更多背噪），負值會使白點變多。")
+                
+                # 執行 OpenCV 自適應二值化
+                img_current = cv2.adaptiveThreshold(
+                    temp, 255, adaptive_method, cv2.THRESH_BINARY, block_size, c_value
+                )
 
         elif step == "Hough 直線偵測":
             edges = img_current if len(img_current.shape) == 2 else cv2.Canny(ensure_grayscale(img_current), 50, 150)
@@ -239,7 +254,6 @@ if uploaded_file is not None:
     with col_left:
         st.subheader("🖼️ 影像對比結果")
         if st.session_state.pipeline:
-            # 橫向印出當前所有的執行路徑
             st.caption(f"🚀 當前 AOI 執行路徑: 原圖 ➔ {' ➔ '.join(st.session_state.pipeline)}")
         
         sub_col_orig, sub_col_proc = st.columns(2)
