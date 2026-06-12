@@ -83,7 +83,7 @@ with st.sidebar:
     # --- 分類 2：邊緣與特徵提取 ---
     with st.expander("📐 2. 空間域與特徵偵測", expanded=False):
         # 這裡加入了【AOI 特徵分析與過濾】選項！
-        opt_feat = st.selectbox("選擇特徵偵測：", ["請選擇...", "Canny 邊緣檢測", "二值化處理", "Hough 直線偵測", "方向性邊緣偵測", "圓圈檢測", "AOI 特徵分析與過濾"], key="sel_feat")
+        opt_feat = st.selectbox("選擇特徵偵測：", ["請選擇...", "Canny 邊緣檢測", "二值化處理", "Hough 直線偵測", "方向性邊緣偵測", "圓圈檢測", "形態學斷開運算 (Opening)", "AOI 特徵分析與過濾"], key="sel_feat")
         if st.button("➕ 加入流水線", key="btn_feat") and opt_feat != "請選擇...":
             st.session_state.pipeline.append(opt_feat)
             
