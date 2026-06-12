@@ -2,6 +2,7 @@ import streamlit as st
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+import pandas as pd  # 引入 pandas 用來精美呈現特徵數據表
 
 # ==========================================
 # 1. 核心演算法工具函式
@@ -46,7 +47,7 @@ def create_mask(rows, cols, mode="low", filter_type="ideal", d0=30, d1=60, n=2):
     return h
 
 def ensure_grayscale(img):
-    """工具函式：確保影像為單通道灰階圖（二值化前置防錯）"""
+    """工具函式：確保影像為單通道灰階圖"""
     return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img
 
 
@@ -57,6 +58,9 @@ st.set_page_config(layout="wide", page_title="AOI 影像處理演算法實驗室
 
 if "pipeline" not in st.session_state:
     st.session_state.pipeline = []
+
+# 用來存放最後一階段特徵提取的數據，方便在主畫面下方繪製表格
+features_data = [] 
 
 
 # ==========================================
@@ -78,8 +82,8 @@ with st.sidebar:
             
     # --- 分類 2：邊緣與特徵提取 ---
     with st.expander("📐 2. 空間域與特徵偵測", expanded=False):
-        # 這裡的選項保留「二值化處理」，我們在主畫面執行時再用拉桿區分固定或自適應
-        opt_feat = st.selectbox("選擇特徵偵測：", ["請選擇...", "Canny 邊緣檢測", "二值化處理", "Hough 直線偵測", "方向性邊緣偵測", "圓圈檢測"], key="sel_feat")
+        # 這裡加入了【AOI 特徵分析與過濾】選項！
+        opt_feat = st.selectbox("選擇特徵偵測：", ["請選擇...", "Canny 邊緣檢測", "二值化處理", "Hough 直線偵測", "方向性邊緣偵測", "圓圈檢測", "AOI 特徵分析與過濾"], key="sel_feat")
         if st.button("➕ 加入流水線", key="btn_feat") and opt_feat != "請選擇...":
             st.session_state.pipeline.append(opt_feat)
             
@@ -124,7 +128,6 @@ if uploaded_file is not None:
     img_original = cv2.imdecode(file_bytes, 1)
     img_current = img_original.copy()
 
-    # 執行工作流
     for step in st.session_state.pipeline:
         
         if step == "轉為灰階":
@@ -149,33 +152,77 @@ if uploaded_file is not None:
             img_current = cv2.Canny(temp, t1, t2)
             
         elif step == "二值化處理":
-            # 【新功能升級】：提供固定與自適應二值化切換
             temp = ensure_grayscale(img_current)
-            
             st.sidebar.markdown("---")
             bin_type = st.sidebar.radio("二值化模式", ["傳統固定門檻", "自適應門檻 (過濾亮度干擾)"])
             
             if bin_type == "傳統固定門檻":
                 thresh = st.sidebar.slider("二值化門檻值", 0, 255, 127)
                 _, img_current = cv2.threshold(temp, thresh, 255, cv2.THRESH_BINARY)
-            
             elif bin_type == "自適應門檻 (過濾亮度干擾)":
-                # 1. 選擇自適應方法：MEAN 較快，GAUSSIAN 在漸層或自然光下邊緣更細膩平滑
                 method_opt = st.sidebar.selectbox("自適應計算方法", ["區域平均加權 (MEAN)", "高斯分佈加權 (GAUSSIAN)"])
                 adaptive_method = cv2.ADAPTIVE_THRESH_MEAN_C if "MEAN" in method_opt else cv2.ADAPTIVE_THRESH_GAUSSIAN_C
-                
-                # 2. Block Size 區域大小：決定考慮多大的周邊鄰域。必須是奇數！
                 block_size = st.sidebar.slider("局部核大小 (Block Size)", 3, 99, 11, step=2)
-                st.sidebar.caption("調整檢測局部特徵的範圍，大圖通常調大，小特徵調小。")
-                
-                # 3. 常數 C：從平均值或加權平均值中減去的常數。可以微調去除環境背噪
                 c_value = st.sidebar.slider("微調常數 (C)", -20, 20, 2)
-                st.sidebar.caption("正值會使黑點變多（過濾更多背噪），負值會使白點變多。")
+                img_current = cv2.adaptiveThreshold(temp, 255, adaptive_method, cv2.THRESH_BINARY, block_size, c_value)
+
+        elif step == "AOI 特徵分析與過濾":
+            # 【全新實作第 2 點需求】：物件篩選與特徵量化
+            # 確保輸入是二值化影像 (單通道)
+            binary_src = ensure_grayscale(img_current)
+            
+            st.sidebar.markdown("---")
+            st.sidebar.subheader("📊 特徵過濾條件設定")
+            
+            # 設定面積過濾閘門 (Filter Gate)
+            min_area = st.sidebar.slider("最小面積門檻 (過濾噪點)", 0, 5000, 50)
+            max_area = st.sidebar.slider("最大面積門檻", min_area, 100000, 50000)
+            
+            # 執行連通域分析 (Connected Components with Stats)
+            # num_labels: 連通域數量, labels: 標記矩陣, stats: 包含[左, 上, 寬, 高, 面積], centroids: 中心點座標
+            num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary_src)
+            
+            # 建立一個乾淨的 BGR 畫布，用來繪製通過篩選的目標
+            output_canvas = cv2.cvtColor(binary_src, cv2.COLOR_GRAY2BGR)
+            features_data = [] # 清空前一次的紀錄
+            
+            object_id = 1
+            # 索引 0 是背景 (Background)，AOI 物件要從 1 開始遍歷
+            for i in range(1, num_labels):
+                area = stats[i, cv2.CC_STAT_AREA]   # 撈取該物件的面積
                 
-                # 執行 OpenCV 自適應二值化
-                img_current = cv2.adaptiveThreshold(
-                    temp, 255, adaptive_method, cv2.THRESH_BINARY, block_size, c_value
-                )
+                # 【條件篩選控制門檻】
+                if min_area <= area <= max_area:
+                    x = stats[i, cv2.CC_STAT_LEFT]
+                    y = stats[i, cv2.CC_STAT_TOP]
+                    w = stats[i, cv2.CC_STAT_WIDTH]
+                    h = stats[i, cv2.CC_STAT_HEIGHT]
+                    cx, cy = centroids[i]           # 質心座標 (中心點)
+                    aspect_ratio = float(w) / h     # 計算長寬比
+                    
+                    # 1. 在畫布上標記黃色外框 (Bounding Box)
+                    cv2.rectangle(output_canvas, (x, y), (x + w, y + h), (0, 255, 255), 2)
+                    
+                    # 2. 畫上紅色的圓心 (質心)
+                    cv2.circle(output_canvas, (int(cx), int(cy)), 4, (0, 0, 255), -1)
+                    
+                    # 3. 在圖面上寫上物件編號 ID
+                    cv2.putText(output_canvas, f"ID:{object_id}", (x, y - 5), 
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+                    
+                    # 4. 紀錄特徵數據，準備餵給 Dataframe 顯示
+                    features_data.append({
+                        "物件 ID": f"ID_{object_id}",
+                        "面積 (pixels)": area,
+                        "中心點 X (cx)": round(cx, 1),
+                        "中心點 Y (cy)": round(cy, 1),
+                        "外框寬度 (w)": w,
+                        "外框高度 (h)": h,
+                        "長寬比 (Aspect Ratio)": round(aspect_ratio, 2)
+                    })
+                    object_id += 1
+                    
+            img_current = output_canvas
 
         elif step == "Hough 直線偵測":
             edges = img_current if len(img_current.shape) == 2 else cv2.Canny(ensure_grayscale(img_current), 50, 150)
@@ -294,5 +341,18 @@ if uploaded_file is not None:
             plt.close(fig_fft)
         else:
             st.info("👈 勾選側邊欄可查看處理後的數據分佈。")
+
+    # --- 【資料表輸出區】 ---
+    # 如果流水線有執行特徵萃取，且有撈到數據，就在底部展示結構化 DataFrame
+    if "AOI 特徵分析與過濾" in st.session_state.pipeline:
+        st.divider()
+        st.subheader("📈 檢測目標定量特徵數據表 (Quantified AOI Features)")
+        if features_data:
+            df = pd.DataFrame(features_data)
+            st.dataframe(df, use_container_width=True)
+            st.success(f"🎯 成功識別出 {len(features_data)} 個符合篩選條件的 AOI 特徵目標！")
+        else:
+            st.warning("⚠️ 當前畫面中沒有符合面積過濾範圍的物件，請調整側邊欄的面積拉桿。")
+
 else:
     st.warning("請先上傳圖片以開始 AOI 演算法測試。")
