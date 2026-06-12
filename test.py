@@ -94,14 +94,27 @@ with st.sidebar:
     st.subheader("📋 目前排定的 AOI 流程")
     
     if st.session_state.pipeline:
-        # 顯示目前的步驟與順序
+        # 遍歷目前所有步驟，並為每個步驟建立一個獨立的整行容器
         for idx, step in enumerate(st.session_state.pipeline):
-            st.text(f"步驟 {idx + 1}: {step}")
+            # 建立兩欄：左邊顯示步驟名稱（較寬），右邊放刪除按鈕（較窄）
+            col_step_name, col_step_del = st.columns([4, 1])
+            
+            with col_step_name:
+                st.markdown(f"**{idx + 1}.** {step}")
+            
+            with col_step_del:
+                # 關鍵點：每個按鈕的 key 必須是唯一的（這裡用 idx 區隔），否則 Streamlit 會報錯
+                if st.button("❌", key=f"del_{idx}", help=f"移除第 {idx+1} 步：{step}"):
+                    # 從列表中移除該特定索引的步驟
+                    st.session_state.pipeline.pop(idx)
+                    # 移除後立即重新整理網頁，讓畫面即時更新
+                    st.rerun()
         
-        # 提供一鍵清空功能
-        if st.button("🗑️ 清空所有步驟", type="primary"):
+        st.write("") # 留一點空白
+        # 保留一個一鍵全清空的備用按鈕（改為次要樣式）
+        if st.button("🔄 重設所有步驟", type="secondary", use_container_width=True):
             st.session_state.pipeline = []
-            st.rerun() # 立即重整畫面
+            st.rerun()
     else:
         st.info("目前尚未選擇步驟，請從上方分類加入。")
         
