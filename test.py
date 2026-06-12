@@ -166,6 +166,35 @@ if uploaded_file is not None:
                 c_value = st.sidebar.slider("微調常數 (C)", -20, 20, 2)
                 img_current = cv2.adaptiveThreshold(temp, 255, adaptive_method, cv2.THRESH_BINARY, block_size, c_value)
 
+        elif step == "形態學斷開運算 (Opening)":
+            temp = ensure_grayscale(img_current)
+            
+            st.sidebar.markdown("---")
+            st.sidebar.subheader("🧮 結構元素設定 (Structuring Element)")
+            
+            # 1. 讓使用者「自行選擇形狀」
+            se_shape_opt = st.sidebar.selectbox(
+                "選擇結構元素形狀：", 
+            ["矩形 (RECT)", "橢圓形/圓形 (ELLIPSE)", "十字形 (CROSS)"]
+            )
+        
+            # 對應 OpenCV 的常數
+        if "RECT" in se_shape_opt:
+            se_shape = cv2.MORPH_RECT
+        elif "ELLIPSE" in se_shape_opt:
+            se_shape = cv2.MORPH_ELLIPSE
+        else:
+            se_shape = cv2.MORPH_CROSS
+        
+        # 2. 讓使用者「自行選擇大小」 (必須 >= 1)
+        se_size = st.sidebar.slider("結構元素大小 (Size)", 1, 51, 5, step=2)
+    
+        # 3. 根據選擇建立結構元素
+        kernel = cv2.getStructuringElement(se_shape, (se_size, se_size))
+    
+        # 執行形態學運算 (Opening: 先侵蝕後膨脹，用來斷開微小噪點)
+        img_current = cv2.morphologyEx(temp, cv2.MORPH_OPEN, kernel)
+        
         elif step == "AOI 特徵分析與過濾":
             # 【全新實作第 2 點需求】：物件篩選與特徵量化
             # 確保輸入是二值化影像 (單通道)
