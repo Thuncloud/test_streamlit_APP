@@ -2,25 +2,22 @@ import streamlit as st
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
-import pandas as pd  # 引入 pandas 用來精美呈現特徵數據表
+import pandas as pd
 
 # ==========================================
 # 1. 核心演算法工具函式
 # ==========================================
 
 def get_fft_shift(img):
-    """執行快速傅立葉轉換 (FFT) 並將低頻成分位移至中心"""
     f = np.fft.fft2(img)
     return np.fft.fftshift(f)
 
 def inverse_fft(fshift):
-    """執行反傅立葉轉換 (IFFT) 將頻域訊號轉回空間域影像"""
     f_ishift = np.fft.ifftshift(fshift)
     img_back = np.fft.ifft2(f_ishift)
     return np.uint8(cv2.normalize(np.abs(img_back), None, 0, 255, cv2.NORM_MINMAX))
 
 def create_mask(rows, cols, mode="low", filter_type="ideal", d0=30, d1=60, n=2):
-    """建立頻域濾波遮罩 (Mask)"""
     crow, ccol = rows // 2, cols // 2
     u = np.linspace(0, rows - 1, rows)
     v = np.linspace(0, cols - 1, cols)
@@ -47,7 +44,6 @@ def create_mask(rows, cols, mode="low", filter_type="ideal", d0=30, d1=60, n=2):
     return h
 
 def ensure_grayscale(img):
-    """工具函式：確保影像為單通道灰階圖"""
     return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img
 
 
@@ -59,7 +55,6 @@ st.set_page_config(layout="wide", page_title="AOI 影像處理演算法實驗室
 if "pipeline" not in st.session_state:
     st.session_state.pipeline = []
 
-# 用來存放最後一階段特徵提取的數據，方便在主畫面下方繪製表格
 features_data = [] 
 
 
@@ -80,15 +75,20 @@ with st.sidebar:
         if st.button("➕ 加入流水線", key="btn_pre") and opt_pre != "請選擇...":
             st.session_state.pipeline.append(opt_pre)
             
-    # --- 分類 2：邊緣與特徵提取 ---
-    with st.expander("📐 2. 空間域與特徵偵測", expanded=False):
-        # 這裡加入了【AOI 特徵分析與過濾】選項！
-        opt_feat = st.selectbox("選擇特徵偵測：", ["請選擇...", "Canny 邊緣檢測", "二值化處理", "Hough 直線偵測", "方向性邊緣偵測", "圓圈檢測", "形態學斷開運算 (Opening)", "AOI 特徵分析與過濾"], key="sel_feat")
+    # --- 【新增】分類 2：形態學運算（滿足作業第 3 點） ---
+    with st.expander("🧮 2. 形態學處理 (孔洞填滿/相連)", expanded=False):
+        opt_morph = st.selectbox("選擇形態學操作：", ["請選擇...", "侵蝕 (Erosion) - 縮小物件", "膨脹 (Dilation) - 放大/相連", "斷開 (Opening) - 去除毛刺", "閉合 (Closing) - 填滿中空孔洞"], key="sel_morph")
+        if st.button("➕ 加入流水線", key="btn_morph") and opt_morph != "請選擇...":
+            st.session_state.pipeline.append(opt_morph)
+            
+    # --- 分類 3：邊緣與特徵提取 ---
+    with st.expander("📐 3. 空間域與特徵偵測", expanded=False):
+        opt_feat = st.selectbox("選擇特徵偵測：", ["請選擇...", "Canny 邊緣檢測", "二值化處理", "Hough 直線偵測", "方向性邊緣偵測", "圓圈檢測", "AOI 特徵分析與過濾"], key="sel_feat")
         if st.button("➕ 加入流水線", key="btn_feat") and opt_feat != "請選擇...":
             st.session_state.pipeline.append(opt_feat)
             
-    # --- 分類 3：頻域分析 ---
-    with st.expander("🌌 3. 傅立葉頻域濾波", expanded=False):
+    # --- 分類 4：頻域分析 ---
+    with st.expander("🌌 4. 傅立葉頻域濾波", expanded=False):
         opt_freq = st.selectbox("選擇頻域濾波：", ["請選擇...", "低通濾波", "高通濾波", "帶通/帶拒"], key="sel_freq")
         if st.button("➕ 加入流水線", key="btn_freq") and opt_freq != "請選擇...":
             st.session_state.pipeline.append(opt_freq)
@@ -144,6 +144,43 @@ if uploaded_file is not None:
         elif step == "中值濾波 (去噪)":
             k = st.sidebar.slider("中值濾波核大小", 3, 15, 5, step=2)
             img_current = cv2.medianBlur(img_current, k)
+
+        # --------------------------------------------------
+        # 【實作第 3 點】：形態學操作與自選結構元素面板
+        # --------------------------------------------------
+        elif step in ["侵蝕 (Erosion) - 縮小物件", "膨脹 (Dilation) - 放大/相連", "斷開 (Opening) - 去除毛刺", "閉合 (Closing) - 填滿中空孔洞"]:
+            temp = ensure_grayscale(img_current)
+            
+            st.sidebar.markdown(f"### 🧮 形態學參數設定\n({step.split(' ')[0]})")
+            
+            # (1) 自選結構元素形狀 (Structuring Element Shape)
+            se_shape_opt = st.sidebar.selectbox(
+                "自行選擇結構元素形狀 (SE Shape)：",
+                ["矩形 (MORPH_RECT)", "橢圓/圓形 (MORPH_ELLIPSE)", "十字形 (MORPH_CROSS)"],
+                key=f"shape_{step}"
+            )
+            if "RECT" in se_shape_opt:
+                se_shape = cv2.MORPH_RECT
+            elif "ELLIPSE" in se_shape_opt:
+                se_shape = cv2.MORPH_ELLIPSE
+            else:
+                se_shape = cv2.MORPH_CROSS
+                
+            # (2) 自選結構元素大小 (Structuring Element Size)
+            se_size = st.sidebar.slider("自行選擇結構元素大小 (Size)：", 1, 51, 5, step=2, key=f"size_{step}")
+            
+            # 根據使用者的「自行選擇」動態建立核心 (Kernel / SE)
+            kernel = cv2.getStructuringElement(se_shape, (se_size, se_size))
+            
+            # (3) 根據選擇的步驟執行相對應的形態學操作
+            if "侵蝕" in step:
+                img_current = cv2.erode(temp, kernel, iterations=1)
+            elif "膨脹" in step:
+                img_current = cv2.dilate(temp, kernel, iterations=1)
+            elif "斷開" in step:
+                img_current = cv2.morphologyEx(temp, cv2.MORPH_OPEN, kernel)
+            elif "閉合" in step:
+                img_current = cv2.morphologyEx(temp, cv2.MORPH_CLOSE, kernel)
             
         elif step == "Canny 邊緣檢測":
             temp = ensure_grayscale(img_current)
@@ -166,80 +203,33 @@ if uploaded_file is not None:
                 c_value = st.sidebar.slider("微調常數 (C)", -20, 20, 2)
                 img_current = cv2.adaptiveThreshold(temp, 255, adaptive_method, cv2.THRESH_BINARY, block_size, c_value)
 
-        elif step == "形態學斷開運算 (Opening)":
-            temp = ensure_grayscale(img_current)
-            
-            st.sidebar.markdown("---")
-            st.sidebar.subheader("🧮 結構元素設定 (Structuring Element)")
-            
-            # 1. 讓使用者「自行選擇形狀」
-            se_shape_opt = st.sidebar.selectbox(
-                "選擇結構元素形狀：", 
-            ["矩形 (RECT)", "橢圓形/圓形 (ELLIPSE)", "十字形 (CROSS)"]
-            )
-        
-            # 對應 OpenCV 的常數
-            if "RECT" in se_shape_opt:
-                se_shape = cv2.MORPH_RECT
-            elif "ELLIPSE" in se_shape_opt:
-                se_shape = cv2.MORPH_ELLIPSE
-            else:
-                se_shape = cv2.MORPH_CROSS
-        
-            # 2. 讓使用者「自行選擇大小」 (必須 >= 1)
-            se_size = st.sidebar.slider("結構元素大小 (Size)", 1, 51, 5, step=2)
-    
-            # 3. 根據選擇建立結構元素
-            kernel = cv2.getStructuringElement(se_shape, (se_size, se_size))
-    
-            # 執行形態學運算 (Opening: 先侵蝕後膨脹，用來斷開微小噪點)
-            img_current = cv2.morphologyEx(temp, cv2.MORPH_OPEN, kernel)
-        
         elif step == "AOI 特徵分析與過濾":
-            # 【全新實作第 2 點需求】：物件篩選與特徵量化
-            # 確保輸入是二值化影像 (單通道)
             binary_src = ensure_grayscale(img_current)
-            
             st.sidebar.markdown("---")
             st.sidebar.subheader("📊 特徵過濾條件設定")
             
-            # 設定面積過濾閘門 (Filter Gate)
             min_area = st.sidebar.slider("最小面積門檻 (過濾噪點)", 0, 5000, 50)
             max_area = st.sidebar.slider("最大面積門檻", min_area, 100000, 50000)
             
-            # 執行連通域分析 (Connected Components with Stats)
-            # num_labels: 連通域數量, labels: 標記矩陣, stats: 包含[左, 上, 寬, 高, 面積], centroids: 中心點座標
             num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary_src)
-            
-            # 建立一個乾淨的 BGR 畫布，用來繪製通過篩選的目標
             output_canvas = cv2.cvtColor(binary_src, cv2.COLOR_GRAY2BGR)
-            features_data = [] # 清空前一次的紀錄
+            features_data = []
             
             object_id = 1
-            # 索引 0 是背景 (Background)，AOI 物件要從 1 開始遍歷
             for i in range(1, num_labels):
-                area = stats[i, cv2.CC_STAT_AREA]   # 撈取該物件的面積
-                
-                # 【條件篩選控制門檻】
+                area = stats[i, cv2.CC_STAT_AREA]
                 if min_area <= area <= max_area:
                     x = stats[i, cv2.CC_STAT_LEFT]
                     y = stats[i, cv2.CC_STAT_TOP]
                     w = stats[i, cv2.CC_STAT_WIDTH]
                     h = stats[i, cv2.CC_STAT_HEIGHT]
-                    cx, cy = centroids[i]           # 質心座標 (中心點)
-                    aspect_ratio = float(w) / h     # 計算長寬比
+                    cx, cy = centroids[i]
+                    aspect_ratio = float(w) / h
                     
-                    # 1. 在畫布上標記黃色外框 (Bounding Box)
                     cv2.rectangle(output_canvas, (x, y), (x + w, y + h), (0, 255, 255), 2)
-                    
-                    # 2. 畫上紅色的圓心 (質心)
                     cv2.circle(output_canvas, (int(cx), int(cy)), 4, (0, 0, 255), -1)
+                    cv2.putText(output_canvas, f"ID:{object_id}", (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
                     
-                    # 3. 在圖面上寫上物件編號 ID
-                    cv2.putText(output_canvas, f"ID:{object_id}", (x, y - 5), 
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-                    
-                    # 4. 紀錄特徵數據，準備餵給 Dataframe 顯示
                     features_data.append({
                         "物件 ID": f"ID_{object_id}",
                         "面積 (pixels)": area,
@@ -250,7 +240,6 @@ if uploaded_file is not None:
                         "長寬比 (Aspect Ratio)": round(aspect_ratio, 2)
                     })
                     object_id += 1
-                    
             img_current = output_canvas
 
         elif step == "Hough 直線偵測":
@@ -322,6 +311,7 @@ if uploaded_file is not None:
                 filtered = cv2.filter2D(temp, cv2.CV_16S, kernels[direction])
                 img_current = cv2.convertScaleAbs(filtered + brightness_offset)
 
+
     # ==========================================
     # 5. 數據與結果視覺化呈現
     # ==========================================
@@ -371,8 +361,6 @@ if uploaded_file is not None:
         else:
             st.info("👈 勾選側邊欄可查看處理後的數據分佈。")
 
-    # --- 【資料表輸出區】 ---
-    # 如果流水線有執行特徵萃取，且有撈到數據，就在底部展示結構化 DataFrame
     if "AOI 特徵分析與過濾" in st.session_state.pipeline:
         st.divider()
         st.subheader("📈 檢測目標定量特徵數據表 (Quantified AOI Features)")
