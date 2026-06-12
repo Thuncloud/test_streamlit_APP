@@ -179,21 +179,21 @@ if uploaded_file is not None:
             )
         
             # 對應 OpenCV 的常數
-        if "RECT" in se_shape_opt:
-            se_shape = cv2.MORPH_RECT
-        elif "ELLIPSE" in se_shape_opt:
-            se_shape = cv2.MORPH_ELLIPSE
-        else:
-            se_shape = cv2.MORPH_CROSS
+            if "RECT" in se_shape_opt:
+                se_shape = cv2.MORPH_RECT
+              elif "ELLIPSE" in se_shape_opt:
+                  se_shape = cv2.MORPH_ELLIPSE
+              else:
+                  se_shape = cv2.MORPH_CROSS
         
-        # 2. 讓使用者「自行選擇大小」 (必須 >= 1)
-        se_size = st.sidebar.slider("結構元素大小 (Size)", 1, 51, 5, step=2)
+              # 2. 讓使用者「自行選擇大小」 (必須 >= 1)
+              se_size = st.sidebar.slider("結構元素大小 (Size)", 1, 51, 5, step=2)
     
-        # 3. 根據選擇建立結構元素
-        kernel = cv2.getStructuringElement(se_shape, (se_size, se_size))
+              # 3. 根據選擇建立結構元素
+              kernel = cv2.getStructuringElement(se_shape, (se_size, se_size))
     
-        # 執行形態學運算 (Opening: 先侵蝕後膨脹，用來斷開微小噪點)
-        img_current = cv2.morphologyEx(temp, cv2.MORPH_OPEN, kernel)
+              # 執行形態學運算 (Opening: 先侵蝕後膨脹，用來斷開微小噪點)
+              img_current = cv2.morphologyEx(temp, cv2.MORPH_OPEN, kernel)
         
         elif step == "AOI 特徵分析與過濾":
             # 【全新實作第 2 點需求】：物件篩選與特徵量化
