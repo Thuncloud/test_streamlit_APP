@@ -63,7 +63,7 @@ features_data = []
 # ==========================================
 with st.sidebar:
     st.title("🎛️ 模組化演算法面板")
-    uploaded_file = st.file_uploader("上傳實驗影像", type=["jpg", "png", "tif"])
+    uploaded_file = st.file_uploader("上傳實驗影像 (來源影像 IMG_L)", type=["jpg", "png", "tif"])
     
     st.divider()
     st.subheader("🧪 演算法分類清單")
@@ -93,9 +93,9 @@ with st.sidebar:
         if st.button("➕ 加入流水線", key="btn_freq") and opt_freq != "請選擇...":
             st.session_state.pipeline.append(opt_freq)
 
-    # --- 【新增】分類 5：幾何形狀與視角變換 ---
-    with st.expander("🗺️ 5. 幾何形狀與視角變換", expanded=False):
-        opt_geo = st.selectbox("選擇幾何變換：", ["請選擇...", "透視變換 (正上方鳥瞰圖)"], key="sel_geo")
+    # --- 【新增】分類 5：幾何視角配準 ---
+    with st.expander("🗺️ 5. 視角對齊配準 (Homography)", expanded=False):
+        opt_geo = st.selectbox("選擇幾何變換：", ["請選擇...", "SIFT 自動特徵匹配變換 (對齊 IMG_S)"], key="sel_geo")
         if st.button("➕ 加入流水線", key="btn_geo") and opt_geo != "請選擇...":
             st.session_state.pipeline.append(opt_geo)
 
@@ -309,36 +309,59 @@ if uploaded_file is not None:
                 img_current = cv2.convertScaleAbs(filtered + brightness_offset)
 
         # --------------------------------------------------
-        # 【新增實作】：透視變換 (Perspective Transform)
+        # 【新增實作】：SIFT 自動配準 Homography 變換
         # --------------------------------------------------
-        elif step == "透視變換 (正上方鳥瞰圖)":
-            h_cur, w_cur = img_current.shape[:2]
-            st.sidebar.markdown("### 🗺️ 透視頂點坐標微調")
-            st.sidebar.caption("請根據左圖棋盤的四個角，調整拉桿：")
+        elif step == "SIFT 自動特徵匹配變換 (對齊 IMG_S)":
+            st.sidebar.markdown("### 🗺️ 配準目標影像上傳")
+            uploaded_target = st.sidebar.file_uploader("上傳目標視角影像 (IMG_S)", type=["jpg", "png", "tif"], key="geo_target")
             
-            # 使用目前的寬高作為拉桿的最大上限值，方便動態適應
-            p1_x = st.sidebar.slider("左上頂點 X (近遠處左)", 0, w_cur, int(w_cur * 0.45))
-            p1_y = st.sidebar.slider("左上頂點 Y", 0, h_cur, int(h_cur * 0.15))
-            
-            p2_x = st.sidebar.slider("右上頂點 X (近遠處右)", 0, w_cur, int(w_cur * 0.55))
-            p2_y = st.sidebar.slider("右上頂點 Y", 0, h_cur, int(h_cur * 0.15))
-            
-            p3_x = st.sidebar.slider("右下頂點 X (近相機右)", 0, w_cur, int(w_cur * 0.85))
-            p3_y = st.sidebar.slider("右下頂點 Y", 0, h_cur, int(h_cur * 0.85))
-            
-            p4_x = st.sidebar.slider("左下頂點 X (近相機左)", 0, w_cur, int(w_cur * 0.10))
-            p4_y = st.sidebar.slider("左下頂點 Y", 0, h_cur, int(h_cur * 0.85))
-            
-            # 組裝原圖 4 個控制點
-            src_pts = np.float32([[p1_x, p1_y], [p2_x, p2_y], [p3_x, p3_y], [p4_x, p4_y]])
-            
-            # 設定輸出正方形大小
-            out_w = st.sidebar.slider("輸出影像尺寸 (正方形寬高)", 100, 1000, 500)
-            dst_pts = np.float32([[0, 0], [out_w, 0], [out_w, out_w], [0, out_w]])
-            
-            # 進行透視轉換
-            M = cv2.getPerspectiveTransform(src_pts, dst_pts)
-            img_current = cv2.warpPerspective(img_current, M, (out_w, out_w))
+            if uploaded_target is not None:
+                # 讀取目標影像
+                target_bytes = np.asarray(bytearray(uploaded_target.read()), dtype=np.uint8)
+                img_target = cv2.imdecode(target_bytes, 1)
+                h_tgt, w_tgt = img_target.shape[:2]
+                
+                # 建立 SIFT 偵測器
+                sift = cv2.SIFT_create()
+                
+                # 轉換為灰階進行特徵提取
+                gray_current = ensure_grayscale(img_current)
+                gray_target = ensure_grayscale(img_target)
+                
+                kp1, des1 = sift.detectAndCompute(gray_current, None)
+                kp2, des2 = sift.detectAndCompute(gray_target, None)
+                
+                if des1 is not None and des2 is not None:
+                    # 使用 K-Nearest Neighbor 進行特徵配對
+                    bf = cv2.BFMatcher()
+                    matches = bf.knnMatch(des1, des2, k=2)
+                    
+                    # 套用 Lowe's Ratio Test 篩選優秀匹配點
+                    good_matches = []
+                    for m, n in matches:
+                        if m.distance < 0.75 * n.distance:
+                            good_matches.append(m)
+                    
+                    # 確保至少有 4 個對應點才能計算 Homography
+                    if len(good_matches) >= 4:
+                        src_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+                        dst_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+                        
+                        # 計算單應性矩陣 (使用 RANSAC 自動排除野值)
+                        H, status = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+                        
+                        if H is not None:
+                            # 執行透視扭曲變換，並將解析度輸出為與目標影像完全相同
+                            img_current = cv2.warpPerspective(img_current, H, (w_tgt, h_tgt))
+                            st.sidebar.success(f"🎯 成功匹配 {len(good_matches)} 個特徵點，已完成視角變換！")
+                        else:
+                            st.sidebar.error("❌ 無法計算單應性矩陣。")
+                    else:
+                        st.sidebar.warning(f"⚠️ 特徵點過少 (僅 {len(good_matches)} 個)，請換張更相似的圖片。")
+                else:
+                    st.sidebar.error("❌ 無法從影像中提取足夠的 SIFT 特徵。")
+            else:
+                st.sidebar.info("💡 請在上方上傳你想對齊的目標視角圖片 (IMG_S)。")
 
 
     # ==========================================
@@ -353,11 +376,11 @@ if uploaded_file is not None:
         
         sub_col_orig, sub_col_proc = st.columns(2)
         with sub_col_orig:
-            st.image(cv2.cvtColor(img_original, cv2.COLOR_BGR2RGB), caption="原始影像 (Original)", use_container_width=True)
+            st.image(cv2.cvtColor(img_original, cv2.COLOR_BGR2RGB), caption="原始影像 (Original / IMG_L)", use_container_width=True)
             
         with sub_col_proc:
             display_img = cv2.cvtColor(img_current, cv2.COLOR_BGR2RGB) if len(img_current.shape) == 3 else img_current
-            st.image(display_img, caption="處理後影像 (Processed)", use_container_width=True)
+            st.image(display_img, caption="處理後影像 (Processed / Align to IMG_S)", use_container_width=True)
 
     with col_right:
         if do_hist:
