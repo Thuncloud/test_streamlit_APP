@@ -75,7 +75,7 @@ with st.sidebar:
         if st.button("➕ 加入流水線", key="btn_pre") and opt_pre != "請選擇...":
             st.session_state.pipeline.append(opt_pre)
             
-    # --- 【新增】分類 2：形態學運算（滿足作業第 3 點） ---
+    # --- 分類 2：形態學運算 ---
     with st.expander("🧮 2. 形態學處理 (孔洞填滿/相連)", expanded=False):
         opt_morph = st.selectbox("選擇形態學操作：", ["請選擇...", "侵蝕 (Erosion) - 縮小物件", "膨脹 (Dilation) - 放大/相連", "斷開 (Opening) - 去除毛刺", "閉合 (Closing) - 填滿中空孔洞"], key="sel_morph")
         if st.button("➕ 加入流水線", key="btn_morph") and opt_morph != "請選擇...":
@@ -92,6 +92,12 @@ with st.sidebar:
         opt_freq = st.selectbox("選擇頻域濾波：", ["請選擇...", "低通濾波", "高通濾波", "帶通/帶拒"], key="sel_freq")
         if st.button("➕ 加入流水線", key="btn_freq") and opt_freq != "請選擇...":
             st.session_state.pipeline.append(opt_freq)
+
+    # --- 【新增】分類 5：幾何形狀與視角變換 ---
+    with st.expander("🗺️ 5. 幾何形狀與視角變換", expanded=False):
+        opt_geo = st.selectbox("選擇幾何變換：", ["請選擇...", "透視變換 (正上方鳥瞰圖)"], key="sel_geo")
+        if st.button("➕ 加入流水線", key="btn_geo") and opt_geo != "請選擇...":
+            st.session_state.pipeline.append(opt_geo)
 
     # --- 流水線管理面板 ---
     st.divider()
@@ -145,15 +151,10 @@ if uploaded_file is not None:
             k = st.sidebar.slider("中值濾波核大小", 3, 15, 5, step=2)
             img_current = cv2.medianBlur(img_current, k)
 
-        # --------------------------------------------------
-        # 【實作第 3 點】：形態學操作與自選結構元素面板
-        # --------------------------------------------------
         elif step in ["侵蝕 (Erosion) - 縮小物件", "膨脹 (Dilation) - 放大/相連", "斷開 (Opening) - 去除毛刺", "閉合 (Closing) - 填滿中空孔洞"]:
             temp = ensure_grayscale(img_current)
-            
             st.sidebar.markdown(f"### 🧮 形態學參數設定\n({step.split(' ')[0]})")
             
-            # (1) 自選結構元素形狀 (Structuring Element Shape)
             se_shape_opt = st.sidebar.selectbox(
                 "自行選擇結構元素形狀 (SE Shape)：",
                 ["矩形 (MORPH_RECT)", "橢圓/圓形 (MORPH_ELLIPSE)", "十字形 (MORPH_CROSS)"],
@@ -166,13 +167,9 @@ if uploaded_file is not None:
             else:
                 se_shape = cv2.MORPH_CROSS
                 
-            # (2) 自選結構元素大小 (Structuring Element Size)
             se_size = st.sidebar.slider("自行選擇結構元素大小 (Size)：", 1, 51, 5, step=2, key=f"size_{step}")
-            
-            # 根據使用者的「自行選擇」動態建立核心 (Kernel / SE)
             kernel = cv2.getStructuringElement(se_shape, (se_size, se_size))
             
-            # (3) 根據選擇的步驟執行相對應的形態學操作
             if "侵蝕" in step:
                 img_current = cv2.erode(temp, kernel, iterations=1)
             elif "膨脹" in step:
@@ -212,7 +209,7 @@ if uploaded_file is not None:
             max_area = st.sidebar.slider("最大面積門檻", min_area, 100000, 50000)
             
             num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary_src)
-            output_canvas = cv2.cvtColor(binary_src, cv2.COLOR_GRAY2BGR)
+            output_canvas = cv2.cvtColor(binary_src, cv2.COLOR_GRAY2BGR) if len(binary_src.shape) == 2 else binary_src.copy()
             features_data = []
             
             object_id = 1
@@ -310,6 +307,38 @@ if uploaded_file is not None:
             else:
                 filtered = cv2.filter2D(temp, cv2.CV_16S, kernels[direction])
                 img_current = cv2.convertScaleAbs(filtered + brightness_offset)
+
+        # --------------------------------------------------
+        # 【新增實作】：透視變換 (Perspective Transform)
+        # --------------------------------------------------
+        elif step == "透視變換 (正上方鳥瞰圖)":
+            h_cur, w_cur = img_current.shape[:2]
+            st.sidebar.markdown("### 🗺️ 透視頂點坐標微調")
+            st.sidebar.caption("請根據左圖棋盤的四個角，調整拉桿：")
+            
+            # 使用目前的寬高作為拉桿的最大上限值，方便動態適應
+            p1_x = st.sidebar.slider("左上頂點 X (近遠處左)", 0, w_cur, int(w_cur * 0.45))
+            p1_y = st.sidebar.slider("左上頂點 Y", 0, h_cur, int(h_cur * 0.15))
+            
+            p2_x = st.sidebar.slider("右上頂點 X (近遠處右)", 0, w_cur, int(w_cur * 0.55))
+            p2_y = st.sidebar.slider("右上頂點 Y", 0, h_cur, int(h_cur * 0.15))
+            
+            p3_x = st.sidebar.slider("右下頂點 X (近相機右)", 0, w_cur, int(w_cur * 0.85))
+            p3_y = st.sidebar.slider("右下頂點 Y", 0, h_cur, int(h_cur * 0.85))
+            
+            p4_x = st.sidebar.slider("左下頂點 X (近相機左)", 0, w_cur, int(w_cur * 0.10))
+            p4_y = st.sidebar.slider("左下頂點 Y", 0, h_cur, int(h_cur * 0.85))
+            
+            # 組裝原圖 4 個控制點
+            src_pts = np.float32([[p1_x, p1_y], [p2_x, p2_y], [p3_x, p3_y], [p4_x, p4_y]])
+            
+            # 設定輸出正方形大小
+            out_w = st.sidebar.slider("輸出影像尺寸 (正方形寬高)", 100, 1000, 500)
+            dst_pts = np.float32([[0, 0], [out_w, 0], [out_w, out_w], [0, out_w]])
+            
+            # 進行透視轉換
+            M = cv2.getPerspectiveTransform(src_pts, dst_pts)
+            img_current = cv2.warpPerspective(img_current, M, (out_w, out_w))
 
 
     # ==========================================
