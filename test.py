@@ -309,60 +309,71 @@ if uploaded_file is not None:
                 img_current = cv2.convertScaleAbs(filtered + brightness_offset)
 
         # --------------------------------------------------
-        # 【新增實作】：SIFT 自動配準 Homography 變換
+        # 【修正防錯版】：SIFT 自動特徵匹配變換 (對齊 IMG_S)
         # --------------------------------------------------
         elif step == "SIFT 自動特徵匹配變換 (對齊 IMG_S)":
             st.sidebar.markdown("### 🗺️ 配準目標影像上傳")
             uploaded_target = st.sidebar.file_uploader("上傳目標視角影像 (IMG_S)", type=["jpg", "png", "tif"], key="geo_target")
             
             if uploaded_target is not None:
-                # 讀取目標影像
-                target_bytes = np.asarray(bytearray(uploaded_target.read()), dtype=np.uint8)
-                img_target = cv2.imdecode(target_bytes, 1)
-                h_tgt, w_tgt = img_target.shape[:2]
-                
-                # 建立 SIFT 偵測器
-                sift = cv2.SIFT_create()
-                
-                # 轉換為灰階進行特徵提取
-                gray_current = ensure_grayscale(img_current)
-                gray_target = ensure_grayscale(img_target)
-                
-                kp1, des1 = sift.detectAndCompute(gray_current, None)
-                kp2, des2 = sift.detectAndCompute(gray_target, None)
-                
-                if des1 is not None and des2 is not None:
-                    # 使用 K-Nearest Neighbor 進行特徵配對
-                    bf = cv2.BFMatcher()
-                    matches = bf.knnMatch(des1, des2, k=2)
+                try:
+                    # 1. 讀取目標影像 (確保以 3 通道彩色讀入)
+                    target_bytes = np.asarray(bytearray(uploaded_target.read()), dtype=np.uint8)
+                    img_target = cv2.imdecode(target_bytes, cv2.IMREAD_COLOR)
+                    h_tgt, w_tgt = img_target.shape[:2]
                     
-                    # 套用 Lowe's Ratio Test 篩選優秀匹配點
-                    good_matches = []
-                    for m, n in matches:
-                        if m.distance < 0.75 * n.distance:
-                            good_matches.append(m)
-                    
-                    # 確保至少有 4 個對應點才能計算 Homography
-                    if len(good_matches) >= 4:
-                        src_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
-                        dst_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
-                        
-                        # 計算單應性矩陣 (使用 RANSAC 自動排除野值)
-                        H, status = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
-                        
-                        if H is not None:
-                            # 執行透視扭曲變換，並將解析度輸出為與目標影像完全相同
-                            img_current = cv2.warpPerspective(img_current, H, (w_tgt, h_tgt))
-                            st.sidebar.success(f"🎯 成功匹配 {len(good_matches)} 個特徵點，已完成視角變換！")
-                        else:
-                            st.sidebar.error("❌ 無法計算單應性矩陣。")
+                    # 2. 確保目前的影像也是 3 通道（防止上一步驟把它變成單通道灰階導致變換後出錯）
+                    if len(img_current.shape) == 2:
+                        img_src_rgb = cv2.cvtColor(img_current, cv2.COLOR_GRAY2BGR)
                     else:
-                        st.sidebar.warning(f"⚠️ 特徵點過少 (僅 {len(good_matches)} 個)，請換張更相似的圖片。")
-                else:
-                    st.sidebar.error("❌ 無法從影像中提取足夠的 SIFT 特徵。")
+                        img_src_rgb = img_current.copy()
+                    
+                    # 3. 轉為灰階專供 SIFT 提取特徵點
+                    gray_current = cv2.cvtColor(img_src_rgb, cv2.COLOR_BGR2GRAY)
+                    gray_target = cv2.cvtColor(img_target, cv2.COLOR_BGR2GRAY)
+                    
+                    # 4. 建立 SIFT 偵測器並計算
+                    sift = cv2.SIFT_create()
+                    kp1, des1 = sift.detectAndCompute(gray_current, None)
+                    kp2, des2 = sift.detectAndCompute(gray_target, None)
+                    
+                    if des1 is not None and des2 is not None:
+                        # 5. 特徵點配對
+                        bf = cv2.BFMatcher()
+                        matches = bf.knnMatch(des1, des2, k=2)
+                        
+                        # 篩選優秀匹配點 (Lowe's Ratio Test)
+                        good_matches = []
+                        for m_pair in matches:
+                            if len(m_pair) == 2:
+                                m, n = m_pair
+                                if m.distance < 0.75 * n.distance:
+                                    good_matches.append(m)
+                        
+                        # 6. 確保至少有 4 個點才能算單應性矩陣
+                        if len(good_matches) >= 4:
+                            src_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+                            dst_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+                            
+                            # 計算 Homography 矩陣
+                            H, status = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+                            
+                            if H is not None:
+                                # 執行透視變換（套用在 3 通道彩圖上）
+                                img_current = cv2.warpPerspective(img_src_rgb, H, (w_tgt, h_tgt))
+                                st.sidebar.success(f"🎯 成功匹配 {len(good_matches)} 個特徵點，已完成視角變換！")
+                            else:
+                                st.sidebar.error("❌ 幾何矩陣計算失敗，請確認圖片是否有足夠重疊範圍。")
+                        else:
+                            st.sidebar.warning(f"⚠️ 找到的特徵點太少 (僅 {len(good_matches)} 個)，無法對齊。")
+                    else:
+                        st.sidebar.error("❌ 無法從影像中提取特徵，請更換圖片。")
+                        
+                except Exception as e:
+                    st.sidebar.error(f"💥 運算時發生錯誤: {str(e)}")
+                    st.info("建議檢查排定的流水線順序，將此步驟移至最前面（緊接在原圖之後）再試一次！")
             else:
                 st.sidebar.info("💡 請在上方上傳你想對齊的目標視角圖片 (IMG_S)。")
-
 
     # ==========================================
     # 5. 數據與結果視覺化呈現
