@@ -63,7 +63,7 @@ features_data = []
 # ==========================================
 with st.sidebar:
     st.title("🎛️ 模組化演算法面板")
-    uploaded_file = st.file_uploader("上傳實驗影像 (來源影像)", type=["jpg", "png", "tif"])
+    uploaded_file = st.file_uploader("上傳實驗影像 (來源影像 IMG_L)", type=["jpg", "png", "tif"])
     
     st.divider()
     st.subheader("🧪 演算法分類清單")
@@ -95,7 +95,7 @@ with st.sidebar:
 
     # --- 分類 5：幾何視角配準 ---
     with st.expander("🗺️ 5. 視角對齊配準 (Homography)", expanded=False):
-        opt_geo = st.selectbox("選擇幾何變換：", ["請選擇...", "SIFT 自動特徵匹配變換 (對齊目標圖)"], key="sel_geo")
+        opt_geo = st.selectbox("選擇幾何變換：", ["請選擇...", "SIFT 自動特徵匹配變換 (對齊 IMG_S)"], key="sel_geo")
         if st.button("➕ 加入流水線", key="btn_geo") and opt_geo != "請選擇...":
             st.session_state.pipeline.append(opt_geo)
 
@@ -309,68 +309,71 @@ if uploaded_file is not None:
                 img_current = cv2.convertScaleAbs(filtered + brightness_offset)
 
         # --------------------------------------------------
-        # 【安全穩定版】：SIFT 自動特徵匹配變換 (對齊目標圖)
+        # 【安全配準版】：SIFT 自動特徵匹配變換 (對齊 IMG_S)
         # --------------------------------------------------
-        elif step == "SIFT 自動特徵匹配變換 (對齊目標圖)":
+        elif step == "SIFT 自動特徵匹配變換 (對齊 IMG_S)":
             st.sidebar.markdown("### 🗺️ 配準目標影像上傳")
-            uploaded_target = st.sidebar.file_uploader("上傳目標視角影像 (如 IMG_S)", type=["jpg", "png", "tif"], key="geo_target")
+            uploaded_target = st.sidebar.file_uploader("上傳目標視角影像 (IMG_S)", type=["jpg", "png", "tif"], key="geo_target")
             
             if uploaded_target is not None:
                 try:
-                    # 1. 強制讀入 3 通道彩圖
+                    # 1. 讀取目標影像 (強制以 3 通道彩色讀入，避免後端格式不對而崩潰)
                     target_bytes = np.asarray(bytearray(uploaded_target.read()), dtype=np.uint8)
                     img_target = cv2.imdecode(target_bytes, cv2.IMREAD_COLOR)
+                    h_tgt, w_tgt = img_target.shape[:2]
                     
-                    if img_target is not None:
-                        h_tgt, w_tgt = img_target.shape[:2]
-                        
-                        # 2. 確保來源影像也是 3 通道彩色副本
-                        if len(img_current.shape) == 2:
-                            img_src_rgb = cv2.cvtColor(img_current, cv2.COLOR_GRAY2BGR)
-                        else:
-                            img_src_rgb = img_current.copy()
-                        
-                        # 3. 轉灰階供 SIFT 提取
-                        gray_current = cv2.cvtColor(img_src_rgb, cv2.COLOR_BGR2GRAY)
-                        gray_target = cv2.cvtColor(img_target, cv2.COLOR_BGR2GRAY)
-                        
-                        # 4. 創立 SIFT 
-                        sift = cv2.SIFT_create()
-                        kp1, des1 = sift.detectAndCompute(gray_current, None)
-                        kp2, des2 = sift.detectAndCompute(gray_target, None)
-                        
-                        if des1 is not None and des2 is not None:
-                            bf = cv2.BFMatcher()
-                            matches = bf.knnMatch(des1, des2, k=2)
-                            
-                            good_matches = []
-                            for m_pair in matches:
-                                if len(m_pair) == 2:
-                                    m, n = m_pair
-                                    if m.distance < 0.75 * n.distance:
-                                        good_matches.append(m)
-                            
-                            if len(good_matches) >= 4:
-                                src_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
-                                dst_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
-                                
-                                H, status = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
-                                
-                                if H is not None:
-                                    img_current = cv2.warpPerspective(img_src_rgb, H, (w_tgt, h_tgt))
-                                    st.sidebar.success(f"🎯 成功匹配 {len(good_matches)} 個特徵點！")
-                                else:
-                                    st.sidebar.error("❌ 幾何矩陣計算失敗。")
-                            else:
-                                st.sidebar.warning(f"⚠️ 特徵點不足 (僅 {len(good_matches)} 組)。")
-                        else:
-                            st.sidebar.error("❌ 無法提取足夠 SIFT 特徵。")
+                    # 2. 通道對齊校正：如果上一步驟把 img_current 變成了黑白(單通道)，強行拉回彩色 3 通道
+                    if len(img_current.shape) == 2:
+                        img_src_rgb = cv2.cvtColor(img_current, cv2.COLOR_GRAY2BGR)
                     else:
-                        st.sidebar.error("❌ 無法讀取目標影像。")
+                        img_src_rgb = img_current.copy()
+                    
+                    # 3. 專門建立乾淨的灰階副本供 SIFT 演算法使用
+                    gray_current = cv2.cvtColor(img_src_rgb, cv2.COLOR_BGR2GRAY)
+                    gray_target = cv2.cvtColor(img_target, cv2.COLOR_BGR2GRAY)
+                    
+                    # 4. 初始化 SIFT 與特徵點抓取
+                    sift = cv2.SIFT_create()
+                    kp1, des1 = sift.detectAndCompute(gray_current, None)
+                    kp2, des2 = sift.detectAndCompute(gray_target, None)
+                    
+                    if des1 is not None and des2 is not None:
+                        # 5. 特徵配對
+                        bf = cv2.BFMatcher()
+                        matches = bf.knnMatch(des1, des2, k=2)
+                        
+                        # 安全篩選：避免特徵點過少或出錯時解包失敗
+                        good_matches = []
+                        for m_pair in matches:
+                            if len(m_pair) == 2:
+                                m, n = m_pair
+                                if m.distance < 0.75 * n.distance:
+                                    good_matches.append(m)
+                        
+                        # 6. 計算 Homography 單應性矩陣 (至少需要 4 點)
+                        if len(good_matches) >= 4:
+                            src_pts = np.float32([kp1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+                            dst_pts = np.float32([kp2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
+                            
+                            H, status = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
+                            
+                            if H is not None:
+                                # 套用矩陣，把目前影像扭曲成 IMG_S 的形狀大小
+                                img_current = cv2.warpPerspective(img_src_rgb, H, (w_tgt, h_tgt))
+                                st.sidebar.success(f"🎯 成功自動匹配 {len(good_matches)} 個特徵點！")
+                            else:
+                                st.sidebar.error("❌ 矩陣求解失敗，兩張圖關聯度不足。")
+                        else:
+                            st.sidebar.warning(f"⚠️ 特徵點不足 (僅 {len(good_matches)} 組)，無法精準變換。")
+                    else:
+                        st.sidebar.error("❌ 無法從影像中提取特徵。")
+                        
                 except Exception as e:
-                    st.sidebar.error(f"💥 運算異常: {str(e)}")
+                    # 捕捉任何可能的異常並輸出提示，不讓整個 Web 炸掉
+                    st.sidebar.error(f"💥 演算法異常: {str(e)}")
+                    st.info("💡 貼心提示：建議在右側列表按 ❌ 清空或重設流程，並將「SIFT變換」排在第一個步驟（緊隨原圖之後）再試試看！")
             else:
-                st.sidebar.info("💡 請在上方欄位上傳對齊目標圖。")
+                st.sidebar.info("💡 請在上方側邊欄欄位上傳配準目標影像 (IMG_S)。")
 
 
     # ==========================================
@@ -385,11 +388,11 @@ if uploaded_file is not None:
         
         sub_col_orig, sub_col_proc = st.columns(2)
         with sub_col_orig:
-            st.image(cv2.cvtColor(img_original, cv2.COLOR_BGR2RGB), caption="原始影像 (Original)", use_container_width=True)
+            st.image(cv2.cvtColor(img_original, cv2.COLOR_BGR2RGB), caption="原始影像 (Original / IMG_L)", use_container_width=True)
             
         with sub_col_proc:
             display_img = cv2.cvtColor(img_current, cv2.COLOR_BGR2RGB) if len(img_current.shape) == 3 else img_current
-            st.image(display_img, caption="處理後影像 (Processed)", use_container_width=True)
+            st.image(display_img, caption="處理後影像 (Processed / Align to IMG_S)", use_container_width=True)
 
     with col_right:
         if do_hist:
